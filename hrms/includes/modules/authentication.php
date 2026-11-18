@@ -8,7 +8,8 @@ if ($action === 'login') {
         $a=one('SELECT * FROM login_attempts WHERE attempt_key=? FOR UPDATE',[$key]);
         if (strtotime($a['window_started']) < time()-900) { query('UPDATE login_attempts SET attempts=0,window_started=NOW() WHERE attempt_key=?',[$key]); $a['attempts']=0; }
         if ((int)$a['attempts']>=15) return ['limited'=>true];
-        $u=one('SELECT u.*,r.role_name,e.employment_status FROM users u JOIN roles r ON r.role_id=u.role_id JOIN employees e ON e.employee_id=u.employee_id WHERE username=?',[$username]);
+        $u=one("SELECT u.*,r.role_name,e.employment_status,CONCAT_WS(' ', e.first_name, e.last_name) AS display_name
+            FROM users u JOIN roles r ON r.role_id=u.role_id JOIN employees e ON e.employee_id=u.employee_id WHERE u.username=?",[$username]);
         $valid=password_verify($password,$u['password_hash'] ?? '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2uheWG/igi.');
         if (!$u || !$valid || $u['account_status']!=='Active' || $u['employment_status']!=='Active') {
             query('UPDATE login_attempts SET attempts=attempts+1 WHERE attempt_key=?',[$key]); audit('login.failed','authentication'); return null;
@@ -19,15 +20,15 @@ if ($action === 'login') {
     if (isset($result['limited'])) { header('Retry-After: 900'); fail(429,'Too many login attempts. Try again later.'); }
     if (!$result) fail(401,'Invalid username or password.');
     session_regenerate_id(true); $_SESSION=[];
-    foreach (['user_id','employee_id','role_id','role_name','username','auth_version'] as $key) $_SESSION[$key]=$result[$key];
+    foreach (['user_id','employee_id','role_id','role_name','username','display_name','auth_version'] as $key) $_SESSION[$key]=$result[$key];
     $_SESSION['csrf_token']=bin2hex(random_bytes(32)); $_SESSION['last_activity']=time();
     audit('login','users',(int)$result['user_id']);
-    $u=array_intersect_key($result,array_flip(['user_id','employee_id','role_id','role_name','username','email']));
+    $u=array_intersect_key($result,array_flip(['user_id','employee_id','role_id','role_name','username','display_name','email']));
     $u['must_change_password']=filter_var($result['must_change_password'],FILTER_VALIDATE_BOOLEAN);
     $u['onboarding_required']=$result['role_name']==='Employee' && onboardingRequired((int)$result['employee_id']);
     reply(['user'=>$u,'csrf_token'=>$_SESSION['csrf_token']],'Login successful.',200,['user'=>$u,'csrf_token'=>$_SESSION['csrf_token']]);
 }
-if ($action==='me') reply(['user'=>array_intersect_key($_SESSION,array_flip(['user_id','employee_id','role_id','role_name','username']))+['onboarding_required'=>(bool)($_SESSION['onboarding_required']??false),'must_change_password'=>(bool)($_SESSION['must_change_password']??false)],'csrf_token'=>$_SESSION['csrf_token']]);
+if ($action==='me') reply(['user'=>array_intersect_key($_SESSION,array_flip(['user_id','employee_id','role_id','role_name','username','display_name']))+['onboarding_required'=>(bool)($_SESSION['onboarding_required']??false),'must_change_password'=>(bool)($_SESSION['must_change_password']??false)],'csrf_token'=>$_SESSION['csrf_token']]);
 if ($action==='change-password') {
     $b=input(); $current=textValue($b['current_password']??null,'current_password',128); $new=textValue($b['new_password']??null,'new_password',128);
     if (!AccountPolicy::isStrongPassword($new)) fail(400,AccountPolicy::PASSWORD_RULE);

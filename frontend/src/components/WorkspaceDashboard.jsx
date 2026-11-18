@@ -163,7 +163,7 @@ function WorkspaceDashboard({
   const navigationModules = availableModules.filter((module) => module.internal && module.href).slice(0, 7)
   const readiness = modules.length ? Math.round((availableModules.length / modules.length) * 100) : 0
   const sessionLabel = sessionStatus.loading ? 'Checking' : sessionStatus.ok ? 'Verified' : 'Pending'
-  const displayName = user.username || 'Team member'
+  const displayName = user.display_name || user.username || 'Team member'
   const unreadNotifications = notifications.filter((notification) => !notification.read_at).length
 
   useEffect(() => {

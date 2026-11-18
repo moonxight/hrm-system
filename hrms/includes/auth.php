@@ -22,7 +22,7 @@ function requireLogin(): void
     if (!isset($conn)) require_once __DIR__ . '/../config/database.php';
 
     $user = one(
-        'SELECT u.user_id,u.employee_id,u.role_id,u.username,u.account_status,u.auth_version,u.must_change_password,r.role_name,e.employment_status,'
+        "SELECT u.user_id,u.employee_id,u.role_id,u.username,u.account_status,u.auth_version,u.must_change_password,r.role_name,e.employment_status,CONCAT_WS(' ', e.first_name, e.last_name) AS display_name,"
         . "(SELECT 1 FROM onboarding o WHERE o.employee_id=u.employee_id AND o.restricts_access AND o.onboarding_status<>'Completed' LIMIT 1) AS onboarding_gate "
         . 'FROM users u JOIN roles r ON r.role_id=u.role_id JOIN employees e ON e.employee_id=u.employee_id WHERE u.user_id=?',
         [(int) $_SESSION['user_id']]
@@ -36,7 +36,7 @@ function requireLogin(): void
         exit;
     }
 
-    foreach (['employee_id', 'role_id', 'role_name', 'username'] as $key) $_SESSION[$key] = $user[$key];
+    foreach (['employee_id', 'role_id', 'role_name', 'username', 'display_name'] as $key) $_SESSION[$key] = $user[$key];
     $checked = true;
 
     // A temporary password must be replaced before anything else is reachable.
