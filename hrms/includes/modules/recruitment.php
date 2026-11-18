@@ -10,7 +10,15 @@ if ($action==='applications') {
     $params=[]; $where='1=1'; if (!isAdminOrHR()) { $where='v.manager_employee_id=?'; $params[]=ownEmployee(); }
     if (isset($b['vacancy_id'])) { $where.=' AND v.vacancy_id=?'; $params[]=id($b['vacancy_id']); }
     if (isset($b['application_id'])) { $where.=' AND a.application_id=?'; $params[]=id($b['application_id']); }
-    reply(rows("SELECT a.*,p.full_name,p.email,p.phone,v.title FROM job_applications a JOIN applicants p ON p.applicant_id=a.applicant_id JOIN job_vacancies v ON v.vacancy_id=a.vacancy_id WHERE $where ORDER BY a.application_id DESC".pageLimit(),$params));
+    if (isset($b['status'])) {
+        $status = choice($b['status'], ['Submitted','Shortlisted','Interview','Offered','Hired','Rejected','Withdrawn']);
+        $where .= ' AND a.status=?';
+        $params[] = $status;
+        if ($status === 'Offered') $where .= " AND v.status NOT IN ('Filled','Cancelled')";
+    }
+    reply(rows("SELECT a.*,p.full_name,p.email,p.phone,v.title,v.department_id,v.position_id
+        FROM job_applications a JOIN applicants p ON p.applicant_id=a.applicant_id
+        JOIN job_vacancies v ON v.vacancy_id=a.vacancy_id WHERE $where ORDER BY a.application_id DESC".pageLimit(),$params));
 }
 if ($action==='interviews' || $action==='history') {
     $id=id($b['application_id']??null); $a=record('job_applications','application_id',$id); vacancyAccess(record('job_vacancies','vacancy_id',(int)$a['vacancy_id']));

@@ -129,9 +129,10 @@ try {
             p.gross_salary,
             p.net_salary,
             p.payroll_status,
-            p.payment_date
+            pp.paid_on AS payment_date
 
         FROM payroll p
+        LEFT JOIN payroll_payments pp ON pp.payroll_id = p.payroll_id
 
         WHERE p.employee_id = ?
           AND p.payroll_status = 'Processed'

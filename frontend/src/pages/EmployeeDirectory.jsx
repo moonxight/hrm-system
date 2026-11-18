@@ -20,6 +20,7 @@ const emptyEmployeeForm = {
   basic_salary: '',
   create_account: false,
   username: '',
+  application_id: '',
 }
 
 function EmployeeDirectory() {
@@ -38,6 +39,24 @@ function EmployeeDirectory() {
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [newAccount, setNewAccount] = useState(null)
+  const [offers, setOffers] = useState([])
+  const [offerError, setOfferError] = useState('')
+
+  useEffect(() => {
+    if (!canManageEmployees) return undefined
+    let active = true
+    apiClient.get('/api/recruitment/applications.php', { params: { status: 'Offered', limit: 200 } })
+      .then((response) => {
+        if (active) {
+          setOffers(response.data.data || [])
+          setOfferError('')
+        }
+      })
+      .catch((requestError) => {
+        if (active) setOfferError(requestError.response?.data?.message || 'Recruitment offers could not be loaded.')
+      })
+    return () => { active = false }
+  }, [canManageEmployees, refreshKey])
 
   useEffect(() => {
     let isActive = true
@@ -109,6 +128,26 @@ function EmployeeDirectory() {
     }))
   }
 
+  const selectOffer = (event) => {
+    const offer = offers.find((candidate) => String(candidate.application_id) === event.target.value)
+    setEmployeeForm((previous) => {
+      if (!offer) return { ...previous, application_id: '' }
+      const [firstName, ...rest] = offer.full_name.trim().split(/\s+/)
+      return {
+        ...previous,
+        application_id: offer.application_id,
+        first_name: firstName,
+        middle_name: '',
+        last_name: rest.join(' '),
+        email: offer.email,
+        phone: offer.phone || '',
+        department_id: offer.department_id,
+        position_id: offer.position_id,
+        create_account: true,
+      }
+    })
+  }
+
   const beginEdit = (employee) => {
     setEditingEmployeeId(employee.employee_id)
     setEmployeeForm({
@@ -147,7 +186,7 @@ function EmployeeDirectory() {
     setSuccess('')
     try {
       const endpoint = editingEmployeeId ? '/api/employees/update.php' : '/api/employees/create.php'
-      const { basic_salary: basicSalary, create_account: createAccount, username, ...employeeFields } = employeeForm
+      const { basic_salary: basicSalary, create_account: createAccount, application_id: applicationId, username, ...employeeFields } = employeeForm
       const response = await apiClient.post(endpoint, {
         ...employeeFields,
         date_of_birth: employeeForm.date_of_birth || null,
@@ -155,12 +194,13 @@ function EmployeeDirectory() {
         department_id: Number(employeeForm.department_id),
         position_id: Number(employeeForm.position_id),
         ...(editingEmployeeId ? { employee_id: editingEmployeeId } : {
+          ...(applicationId ? { application_id: applicationId } : {}),
           ...(basicSalary ? { basic_salary: basicSalary } : {}),
           ...(createAccount ? { create_account: true, ...(username ? { username } : {}) } : {}),
         }),
       })
       setNewAccount(response.data?.data?.account || null)
-      setSuccess(editingEmployeeId ? 'Employee information updated.' : 'Employee record created.')
+      setSuccess(editingEmployeeId ? 'Employee information updated.' : applicationId ? 'Applicant hired and onboarding checklist created.' : 'Employee record created.')
       resetEmployeeForm()
       setRefreshKey((value) => value + 1)
     } catch (requestError) {
@@ -231,6 +271,17 @@ function EmployeeDirectory() {
             </div>
 
             <form onSubmit={saveEmployee} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {!editingEmployeeId && (
+                <label className="md:col-span-2 xl:col-span-4">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Start from a recruitment offer</span>
+                  <select value={employeeForm.application_id} onChange={selectOffer} className="field-input">
+                    <option value="">Enter employee details manually</option>
+                    {offers.map((offer) => <option key={offer.application_id} value={offer.application_id}>{offer.full_name} - {offer.title}</option>)}
+                  </select>
+                  {offerError && <span className="mt-1 block text-sm text-red-700">{offerError}</span>}
+                  {employeeForm.application_id && <span className="mt-1 block text-sm text-slate-600">Review the suggested details before saving. Saving marks the applicant hired and opens their onboarding checklist.</span>}
+                </label>
+              )}
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee number</span><input required name="employee_number" value={employeeForm.employee_number} onChange={handleEmployeeFormChange} placeholder="e.g. FIN-001" className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">First name</span><input required name="first_name" value={employeeForm.first_name} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Middle name</span><input name="middle_name" value={employeeForm.middle_name} onChange={handleEmployeeFormChange} className="field-input" /></label>
@@ -241,7 +292,7 @@ function EmployeeDirectory() {
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Email</span><input required type="email" name="email" value={employeeForm.email} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Phone</span><input name="phone" value={employeeForm.phone} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Hire date</span><input required type="date" name="hire_date" value={employeeForm.hire_date} onChange={handleEmployeeFormChange} className="field-input" /></label>
-              <label><span className="mb-2 block text-sm font-medium text-slate-700">Department</span><select required name="department_id" value={employeeForm.department_id} onChange={handleEmployeeFormChange} className="field-input"><option value="">Select department</option>{configuration.departments.map((department) => <option key={department.department_id} value={department.department_id}>{department.department_code ? `${department.department_code} · ` : ''}{department.department_name}</option>)}</select></label>
+              <label><span className="mb-2 block text-sm font-medium text-slate-700">Department</span><select required name="department_id" value={employeeForm.department_id} onChange={handleEmployeeFormChange} className="field-input"><option value="">Select department</option>{configuration.departments.map((department) => <option key={department.department_id} value={department.department_id}>{department.department_code ? `${department.department_code} � ` : ''}{department.department_name}</option>)}</select></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Position</span><select required name="position_id" value={employeeForm.position_id} onChange={handleEmployeeFormChange} disabled={!employeeForm.department_id} className="field-input"><option value="">Select position</option>{availablePositions.map((position) => <option key={position.position_id} value={position.position_id}>{position.position_name}</option>)}</select></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Employment type</span><select required name="employment_type" value={employeeForm.employment_type} onChange={handleEmployeeFormChange} className="field-input"><option value="Full-Time">Full-Time</option><option value="Part-Time">Part-Time</option><option value="Contract">Contract</option><option value="Temporary">Temporary</option></select></label>
               <label className="md:col-span-2 xl:col-span-1"><span className="mb-2 block text-sm font-medium text-slate-700">Address</span><input name="address" value={employeeForm.address} onChange={handleEmployeeFormChange} className="field-input" /></label>

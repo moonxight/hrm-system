@@ -84,18 +84,41 @@ $dob=$b['date_of_birth']??null;
 if ($dob!==null) { if (!is_string($dob)) fail(400,'Invalid date_of_birth.'); $d=DateTimeImmutable::createFromFormat('!Y-m-d',$dob); if (!$d || $d->format('Y-m-d')!==$dob || $dob>date('Y-m-d') || $dob>=$hire || $dob<'1900-01-01') fail(400,'Invalid date_of_birth.'); }
 $national=isset($b['national_id'])?textValue($b['national_id'],'national_id',50):null;
 $salaryAmount=null; $salaryFrom=$hire; $account=null; $accountName=null; $createAccount=false;
+$offerId = $action === 'create' && isset($b['application_id']) ? id($b['application_id'], 'application_id') : null;
 if ($action==='create') {
     if (isset($b['basic_salary']) && $b['basic_salary']!=='') { $salaryAmount=money($b['basic_salary'],'basic_salary'); if (isset($b['salary_effective_from']) && $b['salary_effective_from']!=='') $salaryFrom=dateValue($b['salary_effective_from'],'salary_effective_from'); }
     $createAccount=filter_var($b['create_account']??false,FILTER_VALIDATE_BOOLEAN);
     if ($createAccount && isset($b['username']) && $b['username']!=='') $accountName=textValue($b['username'],'username',50);
 }
-$id=transaction(function() use($id,$number,$first,$middle,$last,$gender,$dob,$national,$email,$phone,$address,$department,$position,$type,$hire,$action,$salaryAmount,$salaryFrom,$createAccount,$accountName,&$account) {
+$id=transaction(function() use($id,$number,$first,$middle,$last,$gender,$dob,$national,$email,$phone,$address,$department,$position,$type,$hire,$action,$salaryAmount,$salaryFrom,$createAccount,$accountName,$offerId,&$account) {
+    if ($offerId !== null) {
+        $initial = record('job_applications', 'application_id', $offerId);
+        $vacancy = record('job_vacancies', 'vacancy_id', (int) $initial['vacancy_id'], true);
+        $offer = record('job_applications', 'application_id', $offerId, true);
+        if ($offer['status'] !== 'Offered' || in_array($vacancy['status'], ['Filled', 'Cancelled'], true)) {
+            fail(409, 'This offer is no longer available for onboarding.');
+        }
+        $applicant = record('applicants', 'applicant_id', (int) $offer['applicant_id'], true);
+        if (strcasecmp($applicant['email'], $email) !== 0
+            || (int) $vacancy['department_id'] !== $department || (int) $vacancy['position_id'] !== $position) {
+            fail(400, 'The employee email, department and position must match the offer.');
+        }
+        if (one('SELECT employee_id FROM employees WHERE LOWER(email)=LOWER(?)', [$email])) {
+            fail(409, 'An employee with this email already exists. Link the existing employee through Recruitment.');
+        }
+    }
     $values=[$number,$first,$middle,$last,$gender,$dob,$national,$email,$phone,$address,$department,$position,$type,$hire];
     if ($id) { $values[]=$id; query('UPDATE employees SET employee_number=?,first_name=?,middle_name=?,last_name=?,gender=?,date_of_birth=?,national_id=?,email=?,phone=?,address=?,department_id=?,position_id=?,employment_type=?,hire_date=? WHERE employee_id=?',$values); }
     else { query('INSERT INTO employees(employee_number,first_name,middle_name,last_name,gender,date_of_birth,national_id,email,phone,address,department_id,position_id,employment_type,hire_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',$values); $id=inserted();
         query("INSERT INTO leave_balances(employee_id,leave_type_id,year,total_days,used_days,remaining_days) SELECT ?,leave_type_id,?,default_days,0,default_days FROM leave_types WHERE status='Active' ON CONFLICT (employee_id,leave_type_id,year) DO NOTHING",[$id,(int)date('Y')]);
         provisionOnboarding($id,$hire);
         if ($salaryAmount!==null) { query('INSERT INTO employee_salaries(employee_id,basic_salary,effective_from) VALUES (?,?,?)',[$id,$salaryAmount,$salaryFrom]); audit('employee.salary-created','employees',$id,['source'=>'hire']); }
-        if ($createAccount) $account=createEmployeeAccount($id,$first,$last,$email,$accountName); }
+        if ($createAccount) $account=createEmployeeAccount($id,$first,$last,$email,$accountName);
+        if ($offerId !== null) {
+            query("UPDATE job_applications SET status='Hired',hired_employee_id=? WHERE application_id=?", [$id, $offerId]);
+            audit('recruitment.Hired', 'job_applications', $offerId, ['from'=>'Offered','to'=>'Hired','employee_id'=>$id]);
+            notifyHR('New hire moved to onboarding', 'job_applications', $offerId);
+        }
+    }
     audit('employee.'.$action,'employees',$id,['fields'=>['identity','contact','employment']]); return $id;
-}); reply(['employee_id'=>$id]+($account!==null?['account'=>$account]:[]), 'Employee saved.', $action==='create'?201:200);
+}); reply(['employee_id'=>$id] + ($account!==null?['account'=>$account]:[]) + ($offerId!==null?['application_id'=>$offerId]:[]), 'Employee saved.', $action==='create'?201:200);
