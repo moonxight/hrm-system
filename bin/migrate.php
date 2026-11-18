@@ -14,6 +14,10 @@ require_once $backendRoot . '/config/database.php';
 $driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 $dialect = $driver === 'pgsql' ? 'postgresql' : $driver;
 $migrationDirectory = $projectRoot . '/database/' . $dialect;
+if ($driver === 'pgsql') {
+    // A deploy and an operator can run migrations against the same database.
+    $pdo->query('SELECT pg_advisory_lock(1558124704)')->closeCursor();
+}
 
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -42,7 +46,9 @@ try {
         $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version = ?');
         $check->execute([$version]);
 
-        if ($check->fetchColumn()) {
+        $alreadyApplied = $check->fetchColumn();
+        $check->closeCursor();
+        if ($alreadyApplied) {
             echo "Already applied: {$version}\n";
             continue;
         }
@@ -58,7 +64,14 @@ try {
         }
 
         try {
-            $pdo->exec($sql);
+            if ($transactional) {
+                // Send one top-level command, preserving nested PostgreSQL dollar quotes.
+                $marker = '$hrms_migration_' . bin2hex(random_bytes(8)) . '$';
+                $body = '$hrms_apply_' . bin2hex(random_bytes(8)) . '$';
+                $pdo->exec("DO {$body} BEGIN EXECUTE {$marker}\n{$sql}\n{$marker}; END {$body}");
+            } else {
+                $pdo->exec($sql);
+            }
             $record = $pdo->prepare('INSERT INTO schema_migrations (version) VALUES (?)');
             $record->execute([$version]);
 
@@ -69,7 +82,7 @@ try {
             if ($transactional && $pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            throw $exception;
+            throw new RuntimeException("{$version}: " . $exception->getMessage(), 0, $exception);
         }
 
         echo "Applied: {$version}\n";
@@ -79,4 +92,7 @@ try {
     exit(1);
 }
 
+if ($driver === 'pgsql') {
+    $pdo->query('SELECT pg_advisory_unlock(1558124704)')->closeCursor();
+}
 echo "Database migrations are up to date.\n";

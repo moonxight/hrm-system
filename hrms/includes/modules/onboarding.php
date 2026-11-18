@@ -177,25 +177,40 @@ $id=id($b['document_id']??null); $doc=record('onboarding_documents','document_id
 if ($action==='history') reply(rows('SELECT status,reason,changed_by,created_at FROM document_history WHERE document_id=? ORDER BY history_id'.pageLimit(),[$id]));
 if ($action==='download') {
     if (!$doc['document_path'] || !preg_match('/^[a-f0-9]{48}\.(pdf|jpg|png)$/D',$doc['document_path'])) fail(404,'A private document is not available.');
-    $path=privateStorage().DIRECTORY_SEPARATOR.$doc['document_path']; if (!is_file($path)) fail(404,'Document not found.');
-    header('Content-Type: application/octet-stream'); header('Content-Disposition: attachment; filename="document-'.$id.'.'.pathinfo($path,PATHINFO_EXTENSION).'"'); header('Content-Length: '.filesize($path)); readfile($path); exit;
+    $stored = one("SELECT encode(f.content, 'base64') AS content, d.document_path
+        FROM onboarding_document_files f JOIN onboarding_documents d USING(document_id)
+        WHERE f.document_id=?", [$id]);
+    $token = $stored['document_path'] ?? $doc['document_path'];
+    if ($stored !== null) {
+        $content = base64_decode($stored['content'], true);
+    } else {
+        $path = privateStorage() . DIRECTORY_SEPARATOR . $token;
+        $content = is_file($path) ? file_get_contents($path) : false;
+    }
+    if ($content === false) fail(404, 'Document not found.');
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="document-' . $id . '.' . pathinfo($token, PATHINFO_EXTENSION) . '"');
+    header('Content-Length: ' . strlen($content));
+    echo $content;
+    exit;
 }
 if ($action==='submit') {
     $upload=$_FILES['file']??null;
     if (!$upload || !is_array($upload) || ($upload['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK || !is_string($upload['tmp_name']??null) || !is_uploaded_file($upload['tmp_name']) || $upload['size']>5*1024*1024 || $upload['size']<=0) fail(400,'Upload one PDF, PNG or JPEG file up to 5 MB.');
     $mime=(new finfo(FILEINFO_MIME_TYPE))->file($upload['tmp_name']); $ext=['application/pdf'=>'pdf','image/png'=>'png','image/jpeg'=>'jpg'][$mime]??null;
     if (!$ext) fail(400,'Unsupported document type.');
-    $token=bin2hex(random_bytes(24)).'.'.$ext; $path=privateStorage().DIRECTORY_SEPARATOR.$token;
-    try {
-        transaction(function() use($id,$upload,$token,$path,$o) {
+    $content = file_get_contents($upload['tmp_name']);
+    if ($content === false) fail(500, 'Unable to read uploaded document.');
+    $token = bin2hex(random_bytes(24)) . '.' . $ext;
+    transaction(function () use ($id, $content, $token, $o) {
             $onboarding=record('onboarding','onboarding_id',(int)$o['onboarding_id'],true); $d=record('onboarding_documents','document_id',$id,true);
             if ($onboarding['onboarding_status']==='Completed' || !in_array($d['document_status'],['Pending','Rejected'],true)) fail(409,'Only Pending or Rejected documents can be submitted.');
-            if (!move_uploaded_file($upload['tmp_name'],$path)) fail(500,'Unable to store document.');
+            query("INSERT INTO onboarding_document_files(document_id,content) VALUES (?,decode(?, 'base64'))
+                ON CONFLICT(document_id) DO UPDATE SET content=EXCLUDED.content", [$id, base64_encode($content)]);
             query("UPDATE onboarding_documents SET document_path=?,document_status='Submitted',rejection_reason=NULL,verified_by=NULL,verified_at=NULL WHERE document_id=?",[$token,$id]);
             query("UPDATE onboarding SET onboarding_status='In Progress' WHERE onboarding_id=? AND onboarding_status='Not Started'",[(int)$o['onboarding_id']]);
             query("INSERT INTO document_history(document_id,status,changed_by) VALUES (?,'Submitted',?)",[$id,(int)$_SESSION['user_id']]); audit('document.submitted','onboarding_documents',$id); notifyHR('Onboarding document submitted','onboarding_documents',$id);
-        });
-    } catch(Throwable $e) { if (is_file($path)) unlink($path); throw $e; }
+    });
     reply(['document_id'=>$id,'document_status'=>'Submitted']);
 }
 if ($action==='verify') {

@@ -1,14 +1,9 @@
 <?php
 
-require_once "../../includes/cors.php";
+define('HRMS_METHOD', 'POST');
+require_once __DIR__ . '/../../includes/bootstrap.php';
+require_once __DIR__ . '/../../lib/LeavePolicy.php';
 
-header("Content-Type: application/json");
-
-require_once "../../config/database.php";
-require_once "../../includes/auth.php";
-require_once "../../lib/LeavePolicy.php";
-
-requireLogin();
 
 
 /*

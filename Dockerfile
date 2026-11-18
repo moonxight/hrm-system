@@ -8,16 +8,22 @@ ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build
 
+FROM composer:2 AS composer-bin
+
 FROM php:8.3-apache-bookworm
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq-dev \
+    && apt-get install -y --no-install-recommends libpq-dev unzip \
     && docker-php-ext-install pdo_pgsql pdo_mysql \
     && rm -rf /var/lib/apt/lists/* \
     && a2enmod rewrite headers \
+    && printf 'upload_max_filesize=5M\npost_max_size=8M\n' > /usr/local/etc/php/conf.d/hrms-uploads.ini \
     && echo "ServerName localhost" >> /etc/apache2/apache2.conf
 
 WORKDIR /app
+COPY --from=composer-bin /usr/bin/composer /usr/local/bin/composer
+COPY composer.json ./
+RUN COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-interaction --no-progress --prefer-dist
 COPY hrms/ /var/www/html/
 COPY --from=frontend-build /frontend/dist/ /var/www/html/
 COPY bin/ ./bin/

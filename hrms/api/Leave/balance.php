@@ -1,13 +1,8 @@
 <?php
 
-require_once "../../includes/cors.php";
+define('HRMS_METHOD', 'GET');
+require_once __DIR__ . '/../../includes/bootstrap.php';
 
-header("Content-Type: application/json");
-
-require_once "../../config/database.php";
-require_once "../../includes/auth.php";
-
-requireLogin();
 
 
 /*
@@ -91,6 +86,8 @@ if (
     exit;
 }
 
+
+requireEmployeeAccess((int) $employee_id);
 
 /*
  * Validate year.

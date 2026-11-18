@@ -1,11 +1,8 @@
 <?php
 
-require_once "../../includes/cors.php";
+define('HRMS_METHOD', 'POST');
+require_once __DIR__ . '/../../includes/bootstrap.php';
 
-require_once "../../config/database.php";
-require_once "../../includes/auth.php";
-
-requireLogin();
 
 header("Content-Type: application/json");
 

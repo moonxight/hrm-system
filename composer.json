@@ -1,0 +1,11 @@
+{
+  "name": "moonxight/hrms",
+  "require": {
+    "php": "^8.2",
+    "guzzlehttp/guzzle": "^7.10",
+    "senderkit/senderkit-php": "0.3.0"
+  },
+  "config": {
+    "allow-plugins": { "php-http/discovery": false }
+  }
+}

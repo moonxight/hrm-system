@@ -80,6 +80,13 @@ final class Database
 
         if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
             $pdo->exec("SET TIME ZONE 'Africa/Lusaka'");
+            $emailKey = trim((string) getenv('SENDERKIT_API_KEY'));
+            $from = trim((string) getenv('SENDERKIT_FROM_EMAIL'));
+            if (getenv('HRMS_EMAIL_NOTIFICATIONS') === '1'
+                && (str_starts_with($emailKey, 'sk_test_')
+                    || (str_starts_with($emailKey, 'sk_live_') && filter_var($from, FILTER_VALIDATE_EMAIL)))) {
+                $pdo->exec("SET hrms.email_notifications = 'on'");
+            }
         }
 
         return $pdo;

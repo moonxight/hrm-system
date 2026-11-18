@@ -1,11 +1,8 @@
 <?php
 
-require_once "../../includes/cors.php";
+define('HRMS_METHOD', 'GET');
+require_once __DIR__ . '/../../includes/bootstrap.php';
 
-require_once "../../config/database.php";
-require_once "../../includes/auth.php";
-
-requireLogin();
 
 header("Content-Type: application/json");
 
@@ -103,6 +100,14 @@ $sql = "
 $conditions = [];
 $params = [];
 $types = "";
+if ($user_role === "Manager") {
+    $conditions[] = "(lr.employee_id = ? OR EXISTS (SELECT 1 FROM manager_assignments ma
+        WHERE ma.employee_id = lr.employee_id AND ma.manager_employee_id = ? AND ma.status = 'Active'))";
+    $manager = ownEmployee();
+    $params[] = $manager;
+    $params[] = $manager;
+    $types .= "ii";
+}
 
 if ($employee_id !== null && $employee_id !== "") {
     $conditions[] = "lr.employee_id = ?";

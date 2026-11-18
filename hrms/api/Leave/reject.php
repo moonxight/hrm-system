@@ -1,13 +1,8 @@
 <?php
 
-require_once "../../includes/cors.php";
+define('HRMS_METHOD', 'POST');
+require_once __DIR__ . '/../../includes/bootstrap.php';
 
-header("Content-Type: application/json");
-
-require_once "../../config/database.php";
-require_once "../../includes/auth.php";
-
-requireLogin();
 
 $user_role = $_SESSION["role_name"] ?? "";
 
@@ -220,6 +215,7 @@ try {
 
 
     $request = $request_result->fetch_assoc();
+    requireReviewer((int) $request["employee_id"]);
 
 
     /*
@@ -289,6 +285,7 @@ try {
      * STEP 3:
      * Commit the rejection.
      */
+    notifyEmployee((int) $request["employee_id"], 'Leave request rejected', 'leave_requests', (int) $leave_request_id);
     $conn->commit();
 
 
@@ -316,7 +313,9 @@ try {
     /*
      * Roll back if anything fails.
      */
-    $conn->rollback();
+    if ($conn->pdo()->inTransaction()) $conn->rollback();
+    if ($e instanceof ApiError) throw $e;
+    error_log("Leave review failed with database error code " . $e->getCode());
 
     http_response_code(500);
 
