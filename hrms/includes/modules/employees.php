@@ -130,6 +130,13 @@ $id=transaction(function() use($id,$number,$first,$middle,$last,$gender,$dob,$na
         if ($createAccount) $account=createEmployeeAccount($id,$first,$last,$email,$accountName);
         if ($offerId !== null) {
             query("UPDATE job_applications SET status='Hired',hired_employee_id=? WHERE application_id=?", [$id, $offerId]);
+            if ($vacancy['manager_employee_id'] !== null) {
+                query("INSERT INTO manager_assignments(manager_employee_id,employee_id)
+                    SELECT e.employee_id,? FROM employees e JOIN users u ON u.employee_id=e.employee_id
+                    JOIN roles r ON r.role_id=u.role_id
+                    WHERE e.employee_id=? AND e.employment_status='Active' AND u.account_status='Active' AND r.role_name='Manager'
+                    ON CONFLICT (manager_employee_id,employee_id) DO NOTHING", [$id, (int) $vacancy['manager_employee_id']]);
+            }
             audit('recruitment.Hired', 'job_applications', $offerId, ['from'=>'Offered','to'=>'Hired','employee_id'=>$id]);
             notifyHR('New hire moved to onboarding', 'job_applications', $offerId);
         }

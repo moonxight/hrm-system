@@ -192,6 +192,7 @@ function EmployeeDirectory() {
 
   const saveEmployee = async (event) => {
     event.preventDefault()
+    const fields = new FormData(event.currentTarget)
     setSaving(true)
     setError('')
     setSuccess('')
@@ -200,7 +201,8 @@ function EmployeeDirectory() {
       const { basic_salary: basicSalary, create_account: createAccount, application_id: applicationId, username, ...employeeFields } = employeeForm
       const response = await apiClient.post(endpoint, {
         ...employeeFields,
-        date_of_birth: employeeForm.date_of_birth || null,
+        hire_date: fields.get('hire_date'),
+        date_of_birth: fields.get('date_of_birth') || null,
         national_id: employeeForm.national_id || null,
         department_id: Number(employeeForm.department_id),
         position_id: Number(employeeForm.position_id),
@@ -276,7 +278,7 @@ function EmployeeDirectory() {
               <div>
                 <p className="section-label">HR administration</p>
                 <h2 className="mt-2 text-lg font-bold text-slate-900">{editingEmployeeId ? 'Edit employee' : 'Add employee'}</h2>
-                <p className="mt-1 text-sm text-slate-600">The database keeps a global primary key. Employee number is the readable business identifier and may include a department prefix.</p>
+                <p className="mt-1 text-sm text-slate-600">Nexa assigns an employee number when you save. Select the department and position by name.</p>
               </div>
               {editingEmployeeId && <button type="button" onClick={resetEmployeeForm} className="action-button-secondary">Cancel editing</button>}
             </div>

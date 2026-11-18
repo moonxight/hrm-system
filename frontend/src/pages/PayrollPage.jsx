@@ -15,12 +15,6 @@ const initialItemForm = {
   description: '',
 }
 
-const initialPaymentForm = {
-  paid_on: '',
-  payment_method: 'Bank transfer',
-  payment_reference: '',
-}
-
 function getErrorMessage(error, fallback) {
   return error.response?.data?.message || fallback
 }
@@ -35,7 +29,6 @@ function PayrollPage() {
   const canManagePayroll = ['Admin', 'HR'].includes(currentRole)
   const [payrollForm, setPayrollForm] = useState(initialPayrollForm)
   const [itemForm, setItemForm] = useState(initialItemForm)
-  const [paymentForm, setPaymentForm] = useState(initialPaymentForm)
   const [payroll, setPayroll] = useState(null)
   const [payrollRecords, setPayrollRecords] = useState([])
   const [payrollRecordsLoading, setPayrollRecordsLoading] = useState(true)
@@ -254,15 +247,15 @@ function PayrollPage() {
   const recordPayment = async (event) => {
     event.preventDefault()
     if (!payroll?.payroll_id) return
+    const fields = Object.fromEntries(new FormData(event.currentTarget))
     await runAction(
       'record-payment',
       async () => {
         const response = await apiClient.post('/api/payroll/record-payment.php', {
           payroll_id: payroll.payroll_id,
-          ...paymentForm,
+          ...fields,
         })
         updatePayrollRecord(response.data.data)
-        setPaymentForm(initialPaymentForm)
       },
       'Payment recorded successfully.',
     )
@@ -281,7 +274,6 @@ function PayrollPage() {
 
     setPayroll(selectedPayroll || null)
     setItems([])
-    setPaymentForm(initialPaymentForm)
     setError('')
     setSuccessMessage('')
   }
@@ -617,20 +609,20 @@ function PayrollPage() {
           <section className="panel-surface mt-6 p-5 sm:p-6">
             <h2 className="text-lg font-bold text-slate-900">Record payment</h2>
             <p className="mt-1 text-sm text-slate-600">Use the receipt or transaction reference from the payment already made outside HRMS.</p>
-            <form onSubmit={recordPayment} className="mt-4 grid gap-4 sm:grid-cols-3">
+            <form key={payroll.payroll_id} onSubmit={recordPayment} className="mt-4 grid gap-4 sm:grid-cols-3">
               <label>
                 <span className="mb-2 block text-sm font-medium text-slate-700">Payment date</span>
-                <input required type="date" min={payroll.pay_period_start} value={paymentForm.paid_on} onChange={(event) => setPaymentForm({ ...paymentForm, paid_on: event.target.value })} className="field-input" />
+                <input required type="date" name="paid_on" min={payroll.pay_period_start} className="field-input" />
               </label>
               <label>
                 <span className="mb-2 block text-sm font-medium text-slate-700">Payment method</span>
-                <select value={paymentForm.payment_method} onChange={(event) => setPaymentForm({ ...paymentForm, payment_method: event.target.value })} className="field-input">
+                <select name="payment_method" className="field-input">
                   {['Bank transfer', 'Mobile money', 'Cash', 'Cheque'].map((method) => <option key={method}>{method}</option>)}
                 </select>
               </label>
               <label>
                 <span className="mb-2 block text-sm font-medium text-slate-700">Payment reference</span>
-                <input required maxLength={100} value={paymentForm.payment_reference} onChange={(event) => setPaymentForm({ ...paymentForm, payment_reference: event.target.value })} className="field-input" />
+                <input required name="payment_reference" maxLength={100} className="field-input" />
               </label>
               <button type="submit" disabled={isBusy} className="action-button-primary sm:justify-self-start">
                 {loadingAction === 'record-payment' ? 'Recording payment…' : 'Record payment'}
