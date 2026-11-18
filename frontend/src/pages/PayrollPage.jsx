@@ -305,13 +305,13 @@ function PayrollPage() {
         </header>
 
         {error && (
-          <div aria-live="polite" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div role="alert" className="form-message form-message--error mb-6">
             {error}
           </div>
         )}
 
         {successMessage && (
-          <div aria-live="polite" className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <div role="status" className="form-message form-message--success mb-6">
             {successMessage}
           </div>
         )}
@@ -343,7 +343,7 @@ function PayrollPage() {
                 </option>
                 {payrollRecords.map((record) => (
                   <option key={record.payroll_id} value={record.payroll_id}>
-                    #{record.payroll_id} � {record.employee_name || `Employee ${record.employee_id}`} � {record.payroll_status}
+                    #{record.payroll_id} · {record.employee_name || `Employee ${record.employee_id}`} · {record.payroll_status}
                   </option>
                 ))}
               </select>
@@ -428,7 +428,7 @@ function PayrollPage() {
                 <h3 className="font-semibold text-slate-900">Recurring allowance or deduction</h3>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <label className="sm:col-span-2"><span className="mb-2 block text-sm font-medium text-slate-700">Employee</span><EmployeeSelect employees={employees} value={componentForm.employee_id} onChange={(value) => setComponentForm((previous) => ({ ...previous, employee_id: value }))} /></label>
-                  <label><span className="mb-2 block text-sm font-medium text-slate-700">Component</span><select required value={componentForm.payroll_component_id} onChange={(event) => setComponentForm((previous) => ({ ...previous, payroll_component_id: event.target.value }))} className="field-input"><option value="">Select component</option>{payrollComponents.map((component) => <option key={component.payroll_component_id} value={component.payroll_component_id}>{component.component_type} � {component.component_name}</option>)}</select></label>
+                  <label><span className="mb-2 block text-sm font-medium text-slate-700">Component</span><select required value={componentForm.payroll_component_id} onChange={(event) => setComponentForm((previous) => ({ ...previous, payroll_component_id: event.target.value }))} className="field-input"><option value="">Select component</option>{payrollComponents.map((component) => <option key={component.payroll_component_id} value={component.payroll_component_id}>{component.component_type} · {component.component_name}</option>)}</select></label>
                   <label><span className="mb-2 block text-sm font-medium text-slate-700">Value</span><input required min="0" step="0.01" type="number" value={componentForm.component_value} onChange={(event) => setComponentForm((previous) => ({ ...previous, component_value: event.target.value }))} className="field-input" /></label>
                   <label className="sm:col-span-2"><span className="mb-2 block text-sm font-medium text-slate-700">Effective from</span><input required type="date" value={componentForm.effective_from} onChange={(event) => setComponentForm((previous) => ({ ...previous, effective_from: event.target.value }))} className="field-input" /></label>
                   <button type="submit" disabled={isBusy || payrollComponents.length === 0} className="action-button-secondary sm:col-span-2">{loadingAction === 'component' ? 'Assigning component...' : 'Assign recurring component'}</button>
@@ -463,7 +463,7 @@ function PayrollPage() {
                   <option value="">{employeesError ? 'Employee list unavailable' : employees.length === 0 ? 'No active employees found' : 'Select employee'}</option>
                   {employees.map((employee) => (
                     <option key={employee.employee_id} value={employee.employee_id}>
-                      {employee.employee_number || `#${employee.employee_id}`} � {employee.first_name} {employee.last_name} � {employee.department_name || 'No department'}
+                      {employee.employee_number || `#${employee.employee_id}`} · {employee.first_name} {employee.last_name} · {employee.department_name || 'No department'}
                     </option>
                   ))}
                 </select>
@@ -633,7 +633,7 @@ function PayrollPage() {
                 <input required maxLength={100} value={paymentForm.payment_reference} onChange={(event) => setPaymentForm({ ...paymentForm, payment_reference: event.target.value })} className="field-input" />
               </label>
               <button type="submit" disabled={isBusy} className="action-button-primary sm:justify-self-start">
-                {loadingAction === 'record-payment' ? 'Recording payment.' : 'Record payment'}
+                {loadingAction === 'record-payment' ? 'Recording payment…' : 'Record payment'}
               </button>
             </form>
           </section>
@@ -658,7 +658,7 @@ function EmployeeSelect({ employees, value, onChange }) {
       <option value="">{employees.length === 0 ? 'No active employees found' : 'Select employee'}</option>
       {employees.map((employee) => (
         <option key={employee.employee_id} value={employee.employee_id}>
-          {employee.employee_number || `#${employee.employee_id}`} � {employee.first_name} {employee.last_name}
+          {employee.employee_number || `#${employee.employee_id}`} · {employee.first_name} {employee.last_name}
         </option>
       ))}
     </select>

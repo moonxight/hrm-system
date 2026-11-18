@@ -146,16 +146,18 @@ function DashboardInsights({
                     <BarChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
                       <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
                       <XAxis dataKey={chart.xKey} tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 12 }} width={48} />
-                      <Tooltip />
+                      <YAxis allowDecimals={Boolean(chart.currency)} tick={{ fontSize: 12 }} width={chart.currency ? 76 : 48}
+                        tickFormatter={chart.currency ? (value) => new Intl.NumberFormat('en', { notation: 'compact' }).format(value) : undefined} />
+                      <Tooltip formatter={chart.currency ? (value) => `${chart.currency} ${Number(value).toLocaleString('en', { minimumFractionDigits: 2 })}` : undefined} />
                       {chart.series.length > 1 && <Legend />}
                       {chart.series.map((series, index) => (
                         <Bar
                           key={series.key}
                           dataKey={series.key}
                           name={series.label}
+                          stackId={chart.stacked ? 'total' : undefined}
                           fill={series.color || chartColors[index % chartColors.length]}
-                          radius={[3, 3, 0, 0]}
+                          radius={chart.stacked ? 0 : [4, 4, 0, 0]}
                         />
                       ))}
                     </BarChart>

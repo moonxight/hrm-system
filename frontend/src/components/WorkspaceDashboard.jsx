@@ -231,6 +231,7 @@ function WorkspaceDashboard({
         </nav>
 
         <div className="workspace-sidebar__footer">
+          <Link to="/terms" className="px-2 py-1 text-xs font-medium text-slate-600 underline underline-offset-2">Terms of use</Link>
           <div className="sidebar-profile">
             <span className="profile-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
             <span>

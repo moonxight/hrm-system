@@ -1,6 +1,14 @@
 <?php
 requireRole(['Admin','HR','Manager']); $b=HRMS_METHOD==='POST'?input():$_GET;
 function vacancyAccess(array $v): void { if (!isAdminOrHR() && (int)$v['manager_employee_id']!==ownEmployee()) fail(403,'Vacancy is not assigned to you.'); }
+if ($action === 'interviewers') {
+    requireRole(['Admin', 'HR']);
+    reply(rows("SELECT e.employee_id, CONCAT(e.first_name, ' ', e.last_name) AS display_name, r.role_name
+        FROM users u JOIN roles r ON r.role_id=u.role_id JOIN employees e ON e.employee_id=u.employee_id
+        WHERE u.account_status='Active' AND e.employment_status='Active'
+            AND r.role_name IN ('Admin', 'HR', 'Manager')
+        ORDER BY e.first_name, e.last_name"));
+}
 if ($action==='vacancies') {
     $params=[]; $where='1=1'; if (!isAdminOrHR()) { $where='manager_employee_id=?'; $params[]=ownEmployee(); }
     if (isset($b['status'])) { $where.=' AND status=?'; $params[]=choice($b['status'],['Draft','Open','Closed','Filled','Cancelled']); }

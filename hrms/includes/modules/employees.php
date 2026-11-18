@@ -76,7 +76,10 @@ if ($action==='status') {
 if (!in_array($action,['create','update'],true)) fail(404,'Unknown employee action.');
 $id=$action==='update'?id($b['employee_id']??null):null;
 if ($id) { record('employees','employee_id',$id); if ($_SESSION['role_name']==='HR' && one("SELECT u.user_id FROM users u JOIN roles r ON r.role_id=u.role_id WHERE employee_id=? AND r.role_name='Admin'",[$id])) fail(403,'Only Admin may modify an administrator.'); }
-$number=textValue($b['employee_number']??null,'employee_number',20); $first=textValue($b['first_name']??null,'first_name',50); $last=textValue($b['last_name']??null,'last_name',50); $middle=textValue($b['middle_name']??'','middle_name',50,false);
+$number = $id ? textValue($b['employee_number'] ?? '', 'employee_number', 50, false)
+    : textValue($b['employee_number'] ?? '', 'employee_number', 20, false);
+if (!$id && preg_match('/^NEX-[0-9]+$/i', $number)) fail(400, 'NEX employee numbers are assigned automatically.');
+$first=textValue($b['first_name']??null,'first_name',50); $last=textValue($b['last_name']??null,'last_name',50); $middle=textValue($b['middle_name']??'','middle_name',50,false);
 $gender=choice($b['gender']??null,['Male','Female','Other'],'gender'); [$email,$phone,$address]=contactFields($b);
 $department=id($b['department_id']??null); $position=id($b['position_id']??null); positionDepartment($position,$department);
 $type=choice($b['employment_type']??'Full-Time',['Full-Time','Part-Time','Contract','Temporary'],'employment_type'); $hire=dateValue($b['hire_date']??null,'hire_date');
@@ -108,8 +111,19 @@ $id=transaction(function() use($id,$number,$first,$middle,$last,$gender,$dob,$na
         }
     }
     $values=[$number,$first,$middle,$last,$gender,$dob,$national,$email,$phone,$address,$department,$position,$type,$hire];
-    if ($id) { $values[]=$id; query('UPDATE employees SET employee_number=?,first_name=?,middle_name=?,last_name=?,gender=?,date_of_birth=?,national_id=?,email=?,phone=?,address=?,department_id=?,position_id=?,employment_type=?,hire_date=? WHERE employee_id=?',$values); }
-    else { query('INSERT INTO employees(employee_number,first_name,middle_name,last_name,gender,date_of_birth,national_id,email,phone,address,department_id,position_id,employment_type,hire_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',$values); $id=inserted();
+    if ($id) {
+        $current = record('employees', 'employee_id', $id, true);
+        if ($number !== '' && $number !== $current['employee_number'] && preg_match('/^NEX-[0-9]+$/i', $number)) {
+            fail(400, 'NEX employee numbers are assigned automatically.');
+        }
+        $values[0] = $number !== '' ? $number : $current['employee_number'];
+        $values[]=$id;
+        query('UPDATE employees SET employee_number=?,first_name=?,middle_name=?,last_name=?,gender=?,date_of_birth=?,national_id=?,email=?,phone=?,address=?,department_id=?,position_id=?,employment_type=?,hire_date=? WHERE employee_id=?',$values);
+    } else {
+        $numberValue = $number === '' ? 'DEFAULT' : '?';
+        if ($number === '') array_shift($values);
+        query("INSERT INTO employees(employee_number,first_name,middle_name,last_name,gender,date_of_birth,national_id,email,phone,address,department_id,position_id,employment_type,hire_date) VALUES ({$numberValue},?,?,?,?,?,?,?,?,?,?,?,?,?)",$values);
+        $id=inserted();
         query("INSERT INTO leave_balances(employee_id,leave_type_id,year,total_days,used_days,remaining_days) SELECT ?,leave_type_id,?,default_days,0,default_days FROM leave_types WHERE status='Active' ON CONFLICT (employee_id,leave_type_id,year) DO NOTHING",[$id,(int)date('Y')]);
         provisionOnboarding($id,$hire);
         if ($salaryAmount!==null) { query('INSERT INTO employee_salaries(employee_id,basic_salary,effective_from) VALUES (?,?,?)',[$id,$salaryAmount,$salaryFrom]); audit('employee.salary-created','employees',$id,['source'=>'hire']); }

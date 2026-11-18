@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
 import BrandMark from '../components/BrandMark'
 
@@ -174,7 +174,7 @@ function LoginPage() {
                 </button>
               </form>
 
-              <p className="login-panel__footer">Authorized team members only · Access is recorded securely</p>
+              <p className="login-panel__footer">Authorized team members only · <Link to="/terms" className="font-semibold underline underline-offset-2">Terms of use</Link></p>
             </div>
           </section>
         </div>

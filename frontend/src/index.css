@@ -657,6 +657,69 @@
   color: #447c37;
 }
 
+.form-message {
+  animation: nexa-feedback 220ms ease-out both;
+}
+
+.nexa-feature-header {
+  border: 1px solid var(--nexa-border);
+  border-radius: 1.4rem;
+  background: linear-gradient(120deg, #ffffff 25%, #eef1ff 80%, #edf9eb);
+}
+
+.nexa-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  width: 100%;
+  border: 1px solid var(--nexa-border);
+  border-radius: .8rem;
+  padding: .7rem .8rem;
+  background: #fff;
+  text-align: left;
+  font-size: .875rem;
+  transition: background-color 160ms, border-color 160ms;
+}
+
+.nexa-select-row small {
+  color: #515f7c;
+  font-size: .75rem;
+}
+
+.nexa-stage {
+  border: 1px solid var(--nexa-border);
+  border-radius: 2rem;
+  padding: .35rem .65rem;
+  font-size: .78rem;
+}
+
+.nexa-stage b {
+  margin-inline-start: .25rem;
+}
+
+.nexa-select-row:hover, .nexa-stage:hover {
+  background-color: #f1f4ff;
+}
+
+.nexa-select-row[aria-pressed="true"], .nexa-stage[aria-pressed="true"] {
+  border-color: #aab6e2;
+  background-color: #e9eeff;
+  color: #324478;
+}
+
+@keyframes nexa-feedback {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .form-message, .nexa-stage, .nexa-select-row {
+    animation: none;
+    transition: none;
+  }
+}
+
 .login-submit {
   display: flex;
   min-height: 3.25rem;
