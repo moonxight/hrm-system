@@ -31,6 +31,7 @@ function requireLogin(): void
         || (int) $user['auth_version'] !== (int) ($_SESSION['auth_version'] ?? 1)) {
         $_SESSION = [];
         session_regenerate_id(true);
+        header_remove('Set-Cookie');
         http_response_code(401);
         echo json_encode(['success' => false, 'message' => 'Session is no longer valid. Please log in again.']);
         exit;

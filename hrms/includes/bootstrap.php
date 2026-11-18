@@ -64,10 +64,17 @@ foreach ($_GET as $key => $value) {
 }
 
 $public = defined('HRMS_PUBLIC') && HRMS_PUBLIC;
-if (!$public && !isset($_SESSION['user_id'])) fail(401, 'Authentication required.');
+if (!$public && !isset($_SESSION['user_id'])) {
+    // A request dispatched before sign-out may arrive after that session was
+    // destroyed. Its anonymous cookie must not replace a fresh sign-in cookie.
+    header_remove('Set-Cookie');
+    session_abort();
+    fail(401, 'Authentication required.');
+}
 if (!$public && time() - (int) ($_SESSION['last_activity'] ?? time()) > 1800) {
     $_SESSION = [];
     session_regenerate_id(true);
+    header_remove('Set-Cookie');
     fail(401, 'Session expired. Please log in again.');
 }
 if ($expectedMethod === 'POST') {

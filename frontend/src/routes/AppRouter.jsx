@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { isLockedByOnboarding, readStoredUser, refreshSession } from '../api/session'
 import WorkspaceNavigation from '../components/WorkspaceNavigation'
 import ChangePasswordPage from '../pages/ChangePasswordPage'
@@ -84,13 +84,20 @@ function ProtectedRoute({ children }) {
 // so unlocking (or locking) takes effect without signing in again.
 function SessionSync({ onChange }) {
   const location = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (location.pathname === '/login' || !readStoredUser()) return undefined
     let active = true
-    refreshSession().then(({ changed }) => { if (active && changed) onChange() }).catch(() => {})
+    const sessionToken = sessionStorage.getItem('hrms_csrf_token')
+    refreshSession().then(({ changed }) => { if (active && changed) onChange() }).catch((error) => {
+      if (!active || error.response?.status !== 401 || sessionToken !== sessionStorage.getItem('hrms_csrf_token')) return
+      localStorage.removeItem('hrms_user')
+      sessionStorage.removeItem('hrms_csrf_token')
+      navigate('/login', { replace: true })
+    })
     return () => { active = false }
-  }, [location.pathname, onChange])
+  }, [location.pathname, navigate, onChange])
 
   return null
 }
