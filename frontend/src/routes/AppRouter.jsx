@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { isLockedByOnboarding, readStoredUser, refreshSession } from '../api/session'
+import WorkspaceNavigation from '../components/WorkspaceNavigation'
 import ChangePasswordPage from '../pages/ChangePasswordPage'
 import EmployeeDashboard from '../pages/EmployeeDashboard'
 import EmployeeDirectory from '../pages/EmployeeDirectory'
@@ -19,6 +20,8 @@ const ReportsPage = lazy(() => import('../pages/ReportsPage'))
 const RoleDashboard = lazy(() => import('../pages/RoleDashboard'))
 const RecruitmentPage = lazy(() => import('../pages/RecruitmentPage'))
 const AccessPage = lazy(() => import('../pages/AccessPage'))
+const CalendarPage = lazy(() => import('../pages/CalendarPage'))
+const HelpPage = lazy(() => import('../pages/HelpPage'))
 
 // The stored onboarding flag can be stale (HR may have completed the onboarding
 // since sign-in), so confirm with the server before turning someone away.
@@ -143,6 +146,7 @@ function AppRouter() {
     <>
     <SessionSync onChange={handleSessionChange} />
     <OnboardingBanner />
+    <WorkspaceNavigation />
     <Suspense fallback={<p className="p-6 text-sm text-slate-600" role="status">Loading workspace…</p>}>
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
@@ -155,6 +159,8 @@ function AppRouter() {
       <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
       <Route path="/benefits" element={<ProtectedRoute><BenefitsPage /></ProtectedRoute>} />
       <Route path="/onboarding" element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>} />
+      <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+      <Route path="/help" element={<ProtectedRoute><HelpPage /></ProtectedRoute>} />
       <Route path="/progress-tracker" element={<ProtectedRoute><ProgressTrackerPage /></ProtectedRoute>} />
       <Route path="/leave" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager', 'Employee']}><LeavePage /></RoleProtectedRoute></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager', 'Employee']}><AttendancePage /></RoleProtectedRoute></ProtectedRoute>} />

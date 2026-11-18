@@ -35,6 +35,7 @@ function progressSyncStatus(int $recordId): void {
 if ($action==='get') {
     requireLogin(); $params=[]; $where=scope('p.employee_id',$params);
     if (isset($b['employee_id']) && $b['employee_id']!=='') { $employee=id($b['employee_id'],'employee_id'); requireEmployeeAccess($employee); $where.=' AND p.employee_id=?'; $params[]=$employee; }
+    if (isset($b['record_id'])) { $where.=' AND p.record_id=?'; $params[]=id($b['record_id']); }
     if (isset($b['status']) && $b['status']!=='') { $where.=' AND p.status=?'; $params[]=choice($b['status'],['In Progress','Completed','Cancelled'],'status'); }
     reply(progressWithMilestones(rows("SELECT p.*,CONCAT(e.first_name,' ',e.last_name) employee_name FROM progress_records p JOIN employees e ON e.employee_id=p.employee_id WHERE $where ORDER BY p.record_id DESC".pageLimit(),$params)));
 }

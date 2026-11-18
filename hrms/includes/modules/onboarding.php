@@ -20,7 +20,9 @@ function onboardingRequirements(array $o, ?array $documents=null, ?string $formS
     $total=count($documents); $verified=count(array_filter($documents,fn($d)=>$d['document_status']==='Verified'));
     $restricts=filter_var($o['restricts_access']??false,FILTER_VALIDATE_BOOLEAN);
     $documentsDone=$total>0 && $total===$verified;
-    return ['documents_total'=>$total,'documents_verified'=>$verified,'form_required'=>$restricts,'form_status'=>$formStatus,
+    $counts=array_count_values(array_column($documents,'document_status'));
+    return ['documents_total'=>$total,'documents_verified'=>$verified,'documents_pending'=>$counts['Pending']??0,
+        'documents_rejected'=>$counts['Rejected']??0,'form_required'=>$restricts,'form_status'=>$formStatus,
         'ready_to_complete'=>$documentsDone && (!$restricts || $formStatus==='Approved')];
 }
 function onboardingNotifyIfReady(int $onboardingId): void {
@@ -28,13 +30,26 @@ function onboardingNotifyIfReady(int $onboardingId): void {
     if ($o['onboarding_status']!=='Completed' && onboardingRequirements($o)['ready_to_complete']) notifyHR('Onboarding ready for completion','onboarding',$onboardingId);
 }
 if ($action==='get') {
-    $params=[]; $where=isAdminOrHR()?'1=1':'employee_id=?'; if (!isAdminOrHR()) $params[]=ownEmployee();
-    if (isset($b['employee_id'])) { $employee=id($b['employee_id']); if (!isAdminOrHR() && $employee!==ownEmployee()) fail(403,'Access denied.'); $where.=' AND employee_id=?'; $params[]=$employee; }
-    $onboardings=rows("SELECT * FROM onboarding WHERE $where ORDER BY onboarding_id DESC".pageLimit(),$params);
+    $params=[];
+    $where=scope('o.employee_id',$params);
+    $isManager=($_SESSION['role_name']??'')==='Manager';
+    if ($isManager) { $where="($where OR o.employee_id=?)"; $params[]=ownEmployee(); }
+    if (isset($b['employee_id'])) { $employee=id($b['employee_id']); requireEmployeeAccess($employee); $where.=' AND o.employee_id=?'; $params[]=$employee; }
+    if (isset($b['onboarding_id'])) { $where.=' AND o.onboarding_id=?'; $params[]=id($b['onboarding_id']); }
+    if ($isManager && (isset($b['document_id']) || isset($b['form_id']))) { $where.=' AND o.employee_id=?'; $params[]=ownEmployee(); }
+    if (isset($b['document_id'])) { $where.=' AND EXISTS (SELECT 1 FROM onboarding_documents d WHERE d.onboarding_id=o.onboarding_id AND d.document_id=?)'; $params[]=id($b['document_id']); }
+    if (isset($b['form_id'])) { $where.=' AND EXISTS (SELECT 1 FROM onboarding_forms f WHERE f.onboarding_id=o.onboarding_id AND f.form_id=?)'; $params[]=id($b['form_id']); }
+    $onboardings=rows("SELECT o.*,CONCAT_WS(' ',e.first_name,e.last_name) employee_name,e.employee_number,
+        dp.department_name,COALESCE(NULLIF(CONCAT_WS(' ',hr.first_name,hr.last_name),''),u.username) assigned_hr_name
+        FROM onboarding o JOIN employees e ON e.employee_id=o.employee_id
+        LEFT JOIN departments dp ON dp.department_id=e.department_id
+        LEFT JOIN users u ON u.user_id=o.assigned_hr_id LEFT JOIN employees hr ON hr.employee_id=u.employee_id
+        WHERE $where ORDER BY (o.onboarding_status='Completed'),o.start_date DESC,o.onboarding_id DESC".pageLimit(),$params);
     $ids=array_map(fn($o)=>(int)$o['onboarding_id'],$onboardings); $documentsBy=[]; $formStatusBy=[];
     if ($ids) {
         $marks=implode(',',array_fill(0,count($ids),'?'));
-        foreach (rows("SELECT onboarding_id,document_id,document_name,document_type,document_status,rejection_reason,verified_by,verified_at FROM onboarding_documents WHERE onboarding_id IN ($marks) ORDER BY document_id",$ids) as $d) $documentsBy[(int)$d['onboarding_id']][]=$d;
+        foreach (rows("SELECT onboarding_id,document_id,document_name,document_type,document_status,rejection_reason,verified_by,verified_at,
+            (document_path IS NOT NULL AND document_path<>'') has_file FROM onboarding_documents WHERE onboarding_id IN ($marks) ORDER BY document_id",$ids) as $d) $documentsBy[(int)$d['onboarding_id']][]=$d;
         foreach (rows("SELECT onboarding_id,status FROM onboarding_forms WHERE onboarding_id IN ($marks)",$ids) as $f) $formStatusBy[(int)$f['onboarding_id']]=(string)$f['status'];
     }
     foreach ($onboardings as &$o) {
@@ -42,6 +57,9 @@ if ($action==='get') {
         $o['documents']=array_map(function($d){ unset($d['onboarding_id']); return $d; },$documentsBy[$oid]??[]);
         $verified=count(array_filter($o['documents'],fn($d)=>$d['document_status']==='Verified')); $o['verification_percentage']=count($o['documents'])?round(100*$verified/count($o['documents']),2):0;
         $o['requirements']=onboardingRequirements($o,$o['documents'],$formStatusBy[$oid]??'Pending');
+        if ($isManager && (int)$o['employee_id']!==ownEmployee()) {
+            unset($o['documents'],$o['notes']);
+        }
     } unset($o); reply($onboardings);
 }
 if ($action==='create' || $action==='update') {
@@ -60,6 +78,7 @@ if ($action==='create' || $action==='update') {
             if ($restrict) { $f=one('SELECT status FROM onboarding_forms WHERE onboarding_id=?',[$id]); if (($f['status']??'')!=='Approved') fail(409,'The onboarding information form must be approved.'); } }
         if ($id) query('UPDATE onboarding SET start_date=?,onboarding_status=?,assigned_hr_id=?,notes=?,completed_at=?,restricts_access=? WHERE onboarding_id=?',[$start,$status,$hr,$notes,$status==='Completed'?date('Y-m-d H:i:s'):null,$restrict?'true':'false',$id]);
         else { query('INSERT INTO onboarding(employee_id,start_date,onboarding_status,assigned_hr_id,notes,restricts_access) VALUES (?,?,?,?,?,?)',[$employee,$start,$status,$hr,$notes,$restrict?'true':'false']); $id=inserted(); }
+        if ($status==='Completed') notifyEmployee($employee,'Your onboarding is complete','onboarding',$id);
         audit('onboarding.saved','onboarding',$id,['status'=>$status,'restricts_access'=>$restrict]); return $id;
     }); reply(record('onboarding','onboarding_id',$id),'Onboarding saved.',$action==='create'?201:200);
 }
@@ -99,6 +118,7 @@ if ($action==='form-get') {
         $where.=' AND o.employee_id=?'; $params[]=$employee;
     }
     if (isset($b['status']) && $b['status']!=='') { $where.=" AND COALESCE(f.status,'Pending')=?"; $params[]=choice($b['status'],['Pending','Submitted','Approved','Rejected'],'status'); }
+    if (isset($b['onboarding_id'])) { $where.=' AND o.onboarding_id=?'; $params[]=id($b['onboarding_id']); }
     $forms=rows("SELECT o.onboarding_id,o.employee_id,CONCAT(e.first_name,' ',e.last_name) employee_name,o.onboarding_status,f.form_id,"
         ."COALESCE(f.status,'Pending') form_status,f.form_data,f.banking_envelope,f.submitted_at,f.reviewed_by,f.reviewed_at,f.rejection_reason "
         ."FROM onboarding o JOIN employees e ON e.employee_id=o.employee_id LEFT JOIN onboarding_forms f ON f.onboarding_id=o.onboarding_id "
@@ -174,7 +194,10 @@ if ($action==='form-review') {
     reply(['form_id'=>$formId,'form_status'=>$decision],'Onboarding form '.strtolower($decision).'.');
 }
 $id=id($b['document_id']??null); $doc=record('onboarding_documents','document_id',$id); $o=record('onboarding','onboarding_id',(int)$doc['onboarding_id']); onboardingAccess($o);
-if ($action==='history') reply(rows('SELECT status,reason,changed_by,created_at FROM document_history WHERE document_id=? ORDER BY history_id'.pageLimit(),[$id]));
+if ($action==='history') reply(rows("SELECT h.history_id,h.status,h.reason,h.created_at,
+    COALESCE(NULLIF(CONCAT_WS(' ',e.first_name,e.last_name),''),u.username) changed_by_name
+    FROM document_history h LEFT JOIN users u ON u.user_id=h.changed_by LEFT JOIN employees e ON e.employee_id=u.employee_id
+    WHERE h.document_id=? ORDER BY h.history_id DESC".pageLimit(),[$id]));
 if ($action==='download') {
     if (!$doc['document_path'] || !preg_match('/^[a-f0-9]{48}\.(pdf|jpg|png)$/D',$doc['document_path'])) fail(404,'A private document is not available.');
     $stored = one("SELECT encode(f.content, 'base64') AS content, d.document_path
@@ -188,7 +211,8 @@ if ($action==='download') {
         $content = is_file($path) ? file_get_contents($path) : false;
     }
     if ($content === false) fail(404, 'Document not found.');
-    header('Content-Type: application/octet-stream');
+    $extension=pathinfo($token, PATHINFO_EXTENSION);
+    header('Content-Type: '.['pdf'=>'application/pdf','jpg'=>'image/jpeg','png'=>'image/png'][$extension]);
     header('Content-Disposition: attachment; filename="document-' . $id . '.' . pathinfo($token, PATHINFO_EXTENSION) . '"');
     header('Content-Length: ' . strlen($content));
     echo $content;

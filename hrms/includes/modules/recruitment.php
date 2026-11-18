@@ -79,16 +79,16 @@ if ($action==='decision') {
 if ($action==='schedule-interview') {
     requireRole(['Admin','HR']); $id=id($b['application_id']??null); $interviewer=id($b['interviewer_employee_id']??null); $at=textValue($b['scheduled_at']??null,'scheduled_at',19);
     $date=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$at); if (!$date || $date->format('Y-m-d H:i:s')!==$at || $date->getTimestamp()<time()) fail(400,'Interview requires a future YYYY-MM-DD HH:MM:SS date.');
-    $interview=transaction(function() use($id,$interviewer,$at) { $a=record('job_applications','application_id',$id,true); $v=record('job_vacancies','vacancy_id',(int)$a['vacancy_id']); if ($a['status']!=='Interview' || in_array($v['status'],['Filled','Cancelled'],true)) fail(409,'Application must be at Interview stage for an available vacancy.');
+    $interview=transaction(function() use($id,$interviewer,$date) { $a=record('job_applications','application_id',$id,true); $v=record('job_vacancies','vacancy_id',(int)$a['vacancy_id']); if ($a['status']!=='Interview' || in_array($v['status'],['Filled','Cancelled'],true)) fail(409,'Application must be at Interview stage for an available vacancy.');
         if (!one("SELECT u.user_id FROM users u JOIN roles r ON r.role_id=u.role_id WHERE u.employee_id=? AND u.account_status='Active' AND (r.role_name IN ('Admin','HR') OR (r.role_name='Manager' AND u.employee_id=?))",[$interviewer,(int)$v['manager_employee_id']])) fail(400,'Interviewer must be HR/Admin or the assigned manager.');
-        query('INSERT INTO interviews(application_id,interviewer_employee_id,scheduled_at) VALUES (?,?,?)',[$id,$interviewer,$at]); $i=inserted(); audit('recruitment.interview-scheduled','job_applications',$id,['interview_id'=>$i]); notifyEmployee($interviewer,'Interview scheduled','interviews',$i); return $i;
+        query('INSERT INTO interviews(application_id,interviewer_employee_id,scheduled_at) VALUES (?,?,?)',[$id,$interviewer,$date->format(DATE_ATOM)]); $i=inserted(); audit('recruitment.interview-scheduled','job_applications',$id,['interview_id'=>$i]); notifyEmployee($interviewer,'Interview scheduled','interviews',$i); return $i;
     }); reply(['interview_id'=>$interview],'Interview scheduled.',201);
 }
 if ($action==='interview-result') {
     $id=id($b['interview_id']??null); $result=choice($b['result']??null,['Pass','Fail','Hold'],'result'); $notes=textValue($b['notes']??null,'notes',5000);
     transaction(function() use($id,$result,$notes) { $i=record('interviews','interview_id',$id,true); if (!isAdminOrHR() && (int)$i['interviewer_employee_id']!==ownEmployee()) fail(403,'You are not this interviewer.'); $a=record('job_applications','application_id',(int)$i['application_id']); vacancyAccess(record('job_vacancies','vacancy_id',(int)$a['vacancy_id']));
         if ($i['status']!=='Scheduled' || $a['status']!=='Interview') fail(409,'Interview is no longer pending.');
-        if ($i['scheduled_at']>date('Y-m-d H:i:s')) fail(409,'An interview cannot be completed before its scheduled time.');
+        if (new DateTimeImmutable($i['scheduled_at'])>new DateTimeImmutable()) fail(409,'An interview cannot be completed before its scheduled time.');
         query("UPDATE interviews SET status='Completed',result=?,notes=? WHERE interview_id=?",[$result,$notes,$id]); audit('recruitment.interview-result','job_applications',(int)$i['application_id'],['interview_id'=>$id,'result'=>$result]);
     }); reply(['interview_id'=>$id]);
 }

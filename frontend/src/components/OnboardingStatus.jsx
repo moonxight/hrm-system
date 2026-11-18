@@ -44,17 +44,17 @@ export function OnboardingCompletionPanel({ records, onChanged }) {
   const [busyId, setBusyId] = useState(null)
   const [message, setMessage] = useState({ kind: '', text: '' })
   const open = records.filter((record) => record.onboarding_status !== 'Completed' && record.requirements)
-  if (open.length === 0) return null
+  if (open.length === 0 && !message.text) return null
 
-  const complete = async (record) => {
+  const update = async (record, status) => {
     setBusyId(record.onboarding_id)
     setMessage({ kind: '', text: '' })
     try {
-      await apiClient.post('/api/onboarding/update.php', { onboarding_id: record.onboarding_id, onboarding_status: 'Completed' })
-      setMessage({ kind: 'success', text: `Onboarding for employee #${record.employee_id} is complete. Their access is now unlocked.` })
+      await apiClient.post('/api/onboarding/update.php', { onboarding_id: record.onboarding_id, onboarding_status: status })
+      setMessage({ kind: 'success', text: status === 'Completed' ? `${record.employee_name || 'Employee'} has completed onboarding.` : 'Onboarding is in progress.' })
       onChanged()
     } catch (error) {
-      setMessage({ kind: 'error', text: error.response?.data?.message || 'Onboarding could not be completed.' })
+      setMessage({ kind: 'error', text: error.response?.data?.message || 'Onboarding could not be updated.' })
     } finally {
       setBusyId(null)
     }
@@ -69,14 +69,15 @@ export function OnboardingCompletionPanel({ records, onChanged }) {
       <div className="mt-4 space-y-3">
         {open.map((record) => {
           const requirements = record.requirements
+          const inProgress = record.onboarding_status === 'In Progress'
           return (
             <article key={record.onboarding_id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="font-semibold text-slate-900">Employee #{record.employee_id} <span className="text-xs font-normal text-slate-500">({record.onboarding_status}{record.restricts_access ? ', access restricted' : ''})</span></p>
+                <p className="font-semibold text-slate-900">{record.employee_name || record.employee_number} <span className="text-xs font-normal text-slate-500">({record.onboarding_status}{record.restricts_access ? ', access restricted' : ''})</span></p>
                 <p className="mt-1 text-xs text-slate-500">Documents {requirements.documents_verified}/{requirements.documents_total} verified{requirements.form_required ? ` · Form: ${formLabel(requirements.form_status)}` : ''}</p>
               </div>
-              <button type="button" disabled={!requirements.ready_to_complete || busyId === record.onboarding_id} onClick={() => complete(record)} className="action-button-primary disabled:cursor-not-allowed disabled:opacity-50">
-                {busyId === record.onboarding_id ? 'Completing...' : requirements.ready_to_complete ? 'Complete onboarding' : 'Not ready'}
+              <button type="button" disabled={(inProgress && !requirements.ready_to_complete) || busyId === record.onboarding_id} onClick={() => update(record, inProgress ? 'Completed' : 'In Progress')} className="action-button-primary disabled:cursor-not-allowed disabled:opacity-50">
+                {busyId === record.onboarding_id ? 'Saving…' : !inProgress ? (record.onboarding_status === 'On Hold' ? 'Resume onboarding' : 'Start onboarding') : requirements.ready_to_complete ? 'Complete onboarding' : 'Waiting for requirements'}
               </button>
             </article>
           )

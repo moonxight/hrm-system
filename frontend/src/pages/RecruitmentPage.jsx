@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
 import { readStoredUser } from '../api/session'
 import BrandMark from '../components/BrandMark'
@@ -55,11 +55,14 @@ function VacancyForm({ configuration, managers, busy, save }) {
 function RecruitmentPage() {
   const user = readStoredUser()
   const managesHiring = ['Admin', 'HR'].includes(user?.role_name)
+  const [params, setParams] = useSearchParams()
+  const requestedId = params.get('application') || ''
+  const requestedInterview = params.get('interview') || ''
   const [vacancies, setVacancies] = useState([])
   const [applications, setApplications] = useState([])
   const [vacancyId, setVacancyId] = useState(0)
-  const [candidateId, setCandidateId] = useState(0)
   const [stage, setStage] = useState('')
+  const [search, setSearch] = useState('')
   const [interviews, setInterviews] = useState([])
   const [configuration, setConfiguration] = useState({ departments: [], positions: [] })
   const [interviewers, setInterviewers] = useState([])
@@ -69,27 +72,31 @@ function RecruitmentPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState('')
+  const candidateId = /^[1-9]\d*$/.test(requestedId) ? Number(requestedId) : 0
 
   useEffect(() => {
     let current = true
     const requests = [
       apiClient.get('/api/recruitment/vacancies.php', { params: { limit: 200 } }),
       apiClient.get('/api/recruitment/applications.php', { params: { limit: 200 } }),
+      candidateId ? apiClient.get('/api/recruitment/applications.php', { params: { application_id: candidateId } }) : null,
     ]
     if (managesHiring) {
       requests.push(apiClient.get('/api/configuration/get.php'), apiClient.get('/api/recruitment/interviewers.php'))
     }
-    Promise.all(requests).then(([jobs, people, choices, team]) => {
+    Promise.all(requests).then(([jobs, people, linked, choices, team]) => {
       if (!current) return
       setVacancies(jobs.data.data)
-      setApplications(people.data.data)
+      const list = people.data.data || []
+      const target = linked?.data.data?.[0]
+      setApplications(target && !list.some((person) => person.application_id === target.application_id) ? [target, ...list] : list)
       if (choices) setConfiguration(choices.data.data)
       if (team) setInterviewers(team.data.data)
     }).catch((requestError) => {
       if (current) setError(requestError.response?.data?.message || 'Could not load recruitment records.')
     }).finally(() => { if (current) setLoading(false) })
     return () => { current = false }
-  }, [managesHiring, revision])
+  }, [candidateId, managesHiring, revision])
 
   useEffect(() => {
     if (!candidateId) return undefined
@@ -102,11 +109,16 @@ function RecruitmentPage() {
 
   const vacancy = vacancies.find((job) => job.vacancy_id === vacancyId)
   const vacancyApplications = applications.filter((entry) => !vacancyId || entry.vacancy_id === vacancyId)
-  const candidates = vacancyApplications.filter((entry) => !stage || entry.status === stage)
-  const candidate = candidates.find((entry) => entry.application_id === candidateId)
+  const searchText = search.trim().toLowerCase().replace(/\s+/g, ' ')
+  const candidates = vacancyApplications.filter((entry) => (!stage || entry.status === stage) && [entry.full_name, entry.email, entry.application_id].some((value) => String(value ?? '').toLowerCase().includes(searchText)))
+  const candidate = applications.find((entry) => entry.application_id === candidateId)
   const candidateVacancy = vacancies.find((job) => job.vacancy_id === candidate?.vacancy_id)
   const availableInterviewers = interviewers.filter((person) => person.role_name !== 'Manager' || person.employee_id === candidateVacancy?.manager_employee_id)
   const canOffer = interviews.some((entry) => entry.status === 'Completed' && entry.result === 'Pass')
+
+  useEffect(() => {
+    if (requestedInterview) window.document.getElementById(`interview-${requestedInterview}`)?.scrollIntoView({ block: 'center' })
+  }, [interviews, requestedInterview])
 
   async function save(event, endpoint, extras, message, transform = (data) => data) {
     event.preventDefault()
@@ -130,8 +142,9 @@ function RecruitmentPage() {
   }
 
   function selectCandidate(id) {
+    if (id === candidateId && !requestedInterview) return
     setInterviews([])
-    setCandidateId(id)
+    setParams(id ? { application: String(id) } : {})
   }
 
   return (
@@ -190,10 +203,12 @@ function RecruitmentPage() {
                 <button className="action-button-primary sm:justify-self-start" disabled={busy}>Save applicant</button>
               </form>
             )}
+            <label className="mb-3 block text-sm font-medium">Search candidates<input type="search" className="field-input mt-1" placeholder="Name, email or application ID" value={search} onChange={(event) => { setSearch(event.target.value); selectCandidate(0) }} /></label>
             <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter by application stage">
               {['', ...stages].map((label) => <button key={label} type="button" className="nexa-stage" aria-pressed={stage === label} onClick={() => { setStage(label); selectCandidate(0) }}>{label || 'All'} <b>{vacancyApplications.filter((entry) => !label || entry.status === label).length}</b></button>)}
             </div>
             {!loading && candidates.length === 0 && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">No candidates in this view.</p>}
+            {!loading && requestedId && !candidate && <p className="rounded-xl bg-sky-50 p-4 text-sm">This candidate is unavailable. <Link to="/recruitment" className="font-semibold underline">View recruitment</Link></p>}
             <div className="grid gap-4 xl:grid-cols-[minmax(12rem,1fr)_minmax(17rem,1.35fr)]">
               <div className="space-y-2">
                 {candidates.map((person) => <button type="button" key={person.application_id} className="nexa-select-row" aria-pressed={candidateId === person.application_id} onClick={() => selectCandidate(person.application_id)}><span>{person.full_name}<small className="block">{person.title}</small></span><small>{person.status}</small></button>)}
@@ -219,8 +234,8 @@ function RecruitmentPage() {
                     </form>
                   )}
                   {interviews.map((entry) => (
-                    <div key={entry.interview_id} className="mt-4 border-t border-slate-200 pt-3">
-                      <p className="text-sm font-medium">Interview · {entry.scheduled_at} · {entry.result || entry.status}</p>
+                    <div key={entry.interview_id} id={`interview-${entry.interview_id}`} className={`mt-4 scroll-mt-24 border-t border-slate-200 p-3 ${String(entry.interview_id) === requestedInterview ? 'rounded-lg bg-sky-100' : ''}`}>
+                      <p className="text-sm font-medium">Interview · {new Date(entry.scheduled_at).toLocaleString('en-GB', { timeZone: 'Africa/Lusaka' })} · {entry.result || entry.status}</p>
                       {entry.status === 'Scheduled' && candidate.status === 'Interview' && (managesHiring || Number(user?.employee_id) === Number(entry.interviewer_employee_id)) && (
                         <form onSubmit={(event) => save(event, 'interview-result', { interview_id: entry.interview_id }, 'Interview result recorded.')} className="mt-2 space-y-2">
                           <Field label="Result"><select name="result" className="field-input"><option>Pass</option><option>Hold</option><option>Fail</option></select></Field>

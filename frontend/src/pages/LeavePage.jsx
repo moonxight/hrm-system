@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
 
 const initialForm = {
@@ -14,6 +14,8 @@ function getErrorMessage(error, fallback) {
 }
 
 function LeavePage() {
+  const [query] = useSearchParams()
+  const linkedRequest = query.get('request') || ''
   const storedUser = localStorage.getItem('hrms_user')
   const user = storedUser ? JSON.parse(storedUser) : null
   const isEmployee = user?.role_name === 'Employee'
@@ -36,8 +38,8 @@ function LeavePage() {
 
     try {
       const requestParams = {}
-      if (!isEmployee && employeeId) requestParams.employee_id = employeeId
-      if (status) requestParams.status = status
+      if (!linkedRequest && !isEmployee && employeeId) requestParams.employee_id = employeeId
+      if (!linkedRequest && status) requestParams.status = status
 
       const balanceParams = {}
       if (!isEmployee && employeeId) balanceParams.employee_id = employeeId
@@ -58,7 +60,7 @@ function LeavePage() {
     } finally {
       setLoading(false)
     }
-  }, [employeeId, status, isEmployee])
+  }, [employeeId, status, isEmployee, linkedRequest])
 
   useEffect(() => {
     const load = async () => {
@@ -121,6 +123,8 @@ function LeavePage() {
   const selectedLeaveType = leaveTypes.find(
     (type) => String(type.leave_type_id) === String(form.leave_type_id),
   )
+
+  const visibleRequests = linkedRequest ? requests.filter((request) => String(request.leave_request_id) === linkedRequest) : requests
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8">
@@ -195,8 +199,9 @@ function LeavePage() {
 
         <section className="panel-surface p-5 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">Leave requests</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{loading ? 'Loading' : `${requests.length} records`}</span></div>
-          {loading ? <p className="py-6 text-center text-sm text-slate-600">Loading leave requests...</p> : requests.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">No leave requests found.</p> : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Leave</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Days</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr></thead><tbody className="divide-y divide-slate-200">{requests.map((request) => <tr key={request.leave_request_id} className="bg-white"><td className="px-4 py-3 text-slate-700">{request.employee_name}</td><td className="px-4 py-3 font-medium text-slate-900">{request.leave_name}</td><td className="px-4 py-3 text-slate-700">{request.start_date} to {request.end_date}</td><td className="px-4 py-3 text-slate-700">{request.number_of_days}</td><td className="px-4 py-3 text-slate-700">{request.status}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-2">{isEmployee && request.status === 'Pending' && <button type="button" disabled={submitting} onClick={() => cancelRequest(request.leave_request_id)} className="action-button-secondary">Cancel</button>}{canReview && request.status === 'Pending' && <><button type="button" disabled={submitting} onClick={() => reviewRequest(request.leave_request_id, true)} className="action-button-primary">Approve</button><button type="button" disabled={submitting} onClick={() => reviewRequest(request.leave_request_id, false)} className="action-button-secondary">Reject</button></>}</div></td></tr>)}</tbody></table></div>
+          {linkedRequest && <Link to="/leave" className="action-button-secondary mb-4">View all leave requests</Link>}
+          {loading ? <p className="py-6 text-center text-sm text-slate-600">Loading leave requests...</p> : visibleRequests.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">{linkedRequest ? 'This leave request is unavailable.' : 'No leave requests found.'}</p> : (
+            <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Leave</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Days</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr></thead><tbody className="divide-y divide-slate-200">{visibleRequests.map((request) => <tr key={request.leave_request_id} className="bg-white"><td className="px-4 py-3 text-slate-700">{request.employee_name}</td><td className="px-4 py-3 font-medium text-slate-900">{request.leave_name}</td><td className="px-4 py-3 text-slate-700">{request.start_date} to {request.end_date}</td><td className="px-4 py-3 text-slate-700">{request.number_of_days}</td><td className="px-4 py-3 text-slate-700">{request.status}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-2">{isEmployee && request.status === 'Pending' && <button type="button" disabled={submitting} onClick={() => cancelRequest(request.leave_request_id)} className="action-button-secondary">Cancel</button>}{canReview && request.status === 'Pending' && <><button type="button" disabled={submitting} onClick={() => reviewRequest(request.leave_request_id, true)} className="action-button-primary">Approve</button><button type="button" disabled={submitting} onClick={() => reviewRequest(request.leave_request_id, false)} className="action-button-secondary">Reject</button></>}</div></td></tr>)}</tbody></table></div>
           )}
         </section>
       </div>

@@ -36,8 +36,14 @@ function positionDepartment(int $position,int $department): void {
 if ($action==='get') {
     $params=[]; $where=scope('e.employee_id',$params);
     if (isset($b['employee_id'])) { $id=id($b['employee_id']); requireEmployeeAccess($id); $where.=' AND e.employee_id=?'; $params[]=$id; }
-    if (isset($b['search'])) { $search=textValue($b['search'],'search',100); $where.=' AND (e.first_name LIKE ? OR e.last_name LIKE ? OR e.employee_number LIKE ?)'; array_push($params,"%$search%","%$search%","%$search%"); }
+    if (isset($b['search'])) {
+        $search=preg_replace('/\s+/u',' ',textValue($b['search'],'search',100));
+        $pattern='%'.strtr($search,['!'=>'!!','%'=>'!%','_'=>'!_']).'%';
+        $where.=" AND (CONCAT_WS(' ',e.first_name,e.last_name) ILIKE ? ESCAPE '!' OR CONCAT_WS(' ',e.first_name,NULLIF(e.middle_name,''),e.last_name) ILIKE ? ESCAPE '!' OR e.employee_number ILIKE ? ESCAPE '!' OR CAST(e.employee_id AS text)=?)";
+        array_push($params,$pattern,$pattern,$pattern,$search);
+    }
     if (isset($b['department_id'])) { $where.=' AND e.department_id=?'; $params[]=id($b['department_id']); }
+    if (isset($b['hired_from'])) { $where.=' AND e.hire_date>=?'; $params[]=dateValue($b['hired_from'],'hired_from'); }
     if (isset($b['status'])) { $where.=' AND e.employment_status=?'; $params[]=choice($b['status'],['Active','Inactive','Suspended','Terminated']); }
     if (isset($b['employment_type'])) { $where.=' AND e.employment_type=?'; $params[]=choice($b['employment_type'],['Full-Time','Part-Time','Contract','Temporary'],'employment_type'); }
     $fields=isAdminOrHR() ? 'e.*' : 'e.employee_id,e.employee_number,e.first_name,e.last_name,e.email,e.department_id,e.position_id,e.employment_type,e.employment_status';

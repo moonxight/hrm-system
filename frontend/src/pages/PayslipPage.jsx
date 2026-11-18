@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
 
 function getErrorMessage(error, fallback) {
@@ -12,6 +12,8 @@ function formatAmount(amount) {
 }
 
 function PayslipPage() {
+  const [params] = useSearchParams()
+  const requestedPayroll = params.get('payroll') || ''
   const [payrollRecords, setPayrollRecords] = useState([])
   const [selectedPayroll, setSelectedPayroll] = useState(null)
   const [items, setItems] = useState([])
@@ -28,13 +30,13 @@ function PayslipPage() {
       setError('')
 
       try {
-        const response = await apiClient.get('/api/payroll/get.php')
+        const response = await apiClient.get('/api/payroll/get.php', { params: { payroll_id: /^[1-9]\d*$/.test(requestedPayroll) ? requestedPayroll : undefined } })
         const records = response.data.data || []
 
         if (!isActive) return
 
         setPayrollRecords(records)
-        setSelectedPayroll(records[0] || null)
+        setSelectedPayroll(requestedPayroll ? records.find((record) => String(record.payroll_id) === requestedPayroll) || null : records[0] || null)
       } catch (requestError) {
         if (isActive) setError(getErrorMessage(requestError, 'Payroll records could not be loaded.'))
       } finally {
@@ -47,7 +49,7 @@ function PayslipPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [requestedPayroll])
 
   useEffect(() => {
     let isActive = true
@@ -104,6 +106,7 @@ function PayslipPage() {
 
         {loading && <div className="panel-surface p-6 text-sm text-sky-700" role="status">Loading payroll records...</div>}
         {!loading && error && <div className="panel-surface border-red-200 bg-red-50 p-6 text-sm text-red-700" role="alert">{error}</div>}
+        {requestedPayroll && <Link to="/payslip" className="action-button-secondary mb-4">View all payslips</Link>}
         {!loading && !error && payrollRecords.length === 0 && <div className="panel-surface p-6 text-center text-sm text-slate-600" role="status">No payroll records are available for a payslip.</div>}
 
         {!loading && !error && payrollRecords.length > 0 && (

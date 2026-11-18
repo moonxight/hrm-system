@@ -47,6 +47,8 @@ function EmployeeDirectory() {
   const [search, setSearch] = useState('')
   const [employmentStatus, setEmploymentStatus] = useState('')
   const [employmentType, setEmploymentType] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState('')
+  const [hiredFrom, setHiredFrom] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -106,9 +108,11 @@ function EmployeeDirectory() {
       try {
         const response = await apiClient.get('/api/employees/get.php', {
           params: {
-            search: search || undefined,
+            search: search.trim() || undefined,
             status: employmentStatus || undefined,
             employment_type: employmentType || undefined,
+            department_id: departmentFilter || undefined,
+            hired_from: hiredFrom || undefined,
             limit: 200,
           },
         })
@@ -132,12 +136,13 @@ function EmployeeDirectory() {
       }
     }
 
-    loadEmployees()
+    const debounce = window.setTimeout(loadEmployees, 250)
 
     return () => {
       isActive = false
+      clearTimeout(debounce)
     }
-  }, [employmentStatus, employmentType, refreshKey, search])
+  }, [departmentFilter, employmentStatus, employmentType, hiredFrom, refreshKey, search])
 
   const availablePositions = configuration.positions.filter(
     (position) => String(position.department_id) === String(employeeForm.department_id),
@@ -241,8 +246,8 @@ function EmployeeDirectory() {
     }
   }
 
-  const statusOptions = [...new Set(employees.map((employee) => employee.employment_status).filter(Boolean))]
-  const typeOptions = [...new Set(employees.map((employee) => employee.employment_type).filter(Boolean))]
+  const statusOptions = ['Active', 'Inactive', 'Suspended', 'Terminated']
+  const typeOptions = ['Full-Time', 'Part-Time', 'Contract', 'Temporary']
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8">
@@ -349,7 +354,7 @@ function EmployeeDirectory() {
               </p>
             </div>
 
-            <fieldset className="flex flex-col gap-3 sm:flex-row">
+            <fieldset className="flex flex-wrap items-end gap-3">
               <legend className="sr-only">Employee search and filter controls</legend>
               <div>
                 <label htmlFor="employee-search" className="sr-only">Search by employee ID, number, or name</label>
@@ -359,7 +364,6 @@ function EmployeeDirectory() {
                   placeholder="Search employees"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  disabled={loading}
                   aria-describedby="employee-filter-status"
                   className="field-input w-full sm:w-64"
                 />
@@ -370,7 +374,6 @@ function EmployeeDirectory() {
                   id="employment-status"
                   value={employmentStatus}
                   onChange={(event) => setEmploymentStatus(event.target.value)}
-                  disabled={loading}
                   aria-describedby="employee-filter-status"
                   className="field-input w-full sm:w-48"
                 >
@@ -384,7 +387,6 @@ function EmployeeDirectory() {
                   id="employment-type"
                   value={employmentType}
                   onChange={(event) => setEmploymentType(event.target.value)}
-                  disabled={loading}
                   aria-describedby="employee-filter-status"
                   className="field-input w-full sm:w-48"
                 >
@@ -392,10 +394,12 @@ function EmployeeDirectory() {
                   {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
+              <label className="text-sm font-medium">Department<select className="field-input mt-1" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}><option value="">All departments</option>{configuration.departments.map((entry) => <option key={entry.department_id} value={entry.department_id}>{entry.department_name}</option>)}</select></label>
+              <label className="text-sm font-medium">Hired on or after<input className="field-input mt-1" type="date" value={hiredFrom} onChange={(event) => setHiredFrom(event.target.value)} /></label>
             </fieldset>
           </div>
           <p id="employee-filter-status" role="status" className="mt-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-            Search uses the employee number, first name, and last name fields provided by the employee API.
+            Search by full name, employee number, or ID. Filters work together.
           </p>
         </section>
 

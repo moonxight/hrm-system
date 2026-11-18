@@ -11,6 +11,10 @@ if ($action==='get') {
     if (!isAdminOrHR()) {
         $where .= " AND p.payroll_status='Processed'";
     }
+    if (isset($b['payroll_id'])) {
+        $where .= ' AND p.payroll_id=?';
+        $params[] = id($b['payroll_id'], 'payroll_id');
+    }
     if (($_SESSION['role_name'] ?? '') !== 'Employee' && isset($b['employee_id']) && $b['employee_id'] !== '') {
         $where .= ' AND p.employee_id=?';
         $params[] = id($b['employee_id'], 'employee_id');

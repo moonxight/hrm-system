@@ -15,7 +15,7 @@ function check(bool $condition, string $message): void
 foreach ([
     '/api/auth/me.php', '/api/onboarding/get.php', '/api/onboarding/form-submit.php', '/api/documents/submit.php',
     '/api/notifications/get.php', '/api/attendance/check-in.php', '/api/self-service/profile.php',
-    '/api/health.php', '/api/configuration/get.php', '/app/hrms/api/onboarding/get.php',
+    '/api/health.php', '/api/configuration/get.php', '/app/hrms/api/onboarding/get.php', '/api/calendar/get.php',
 ] as $open) {
     check(OnboardingAccess::allows($open), "$open stays open during onboarding");
 }
@@ -25,7 +25,7 @@ foreach ([
     '/api/employees/get.php', '/api/performance/goals/get.php', '/api/training/get.php', '/api/progress/get.php',
     '/api/self-service/payroll.php', '/api/self-service/salary.php', '/api/self-service/leave.php',
     '/api/manager/team.php', '/api/users/get.php', '/api/analytics/summary.php', '/api/recruitment/vacancies.php',
-    '/api/announcements/create.php', '/api/configuration/leave-type.php',
+    '/api/announcements/create.php', '/api/configuration/leave-type.php', '/api/calendar/create.php',
 ] as $blocked) {
     check(!OnboardingAccess::allows($blocked), "$blocked is blocked during onboarding");
 }

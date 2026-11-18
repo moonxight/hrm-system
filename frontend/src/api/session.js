@@ -8,6 +8,8 @@ export const ONBOARDING_OPEN_ROUTES = [
   '/onboarding',
   '/documents',
   '/attendance',
+  '/calendar',
+  '/help',
   '/change-password',
 ]
 

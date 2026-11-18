@@ -101,6 +101,12 @@ if ($action === 'get') {
     $params = [];
     $where = scope('a.employee_id', $params);
 
+    if (($body['today'] ?? '') === '1') {
+        requireRole(['Employee']);
+        $where .= ' AND a.attendance_date=?';
+        $params[] = (new DateTimeImmutable('now', attendanceTimezone(ownEmployee())))->format('Y-m-d');
+    }
+
     if (isset($body['employee_id']) && $body['employee_id'] !== '') {
         $employeeId = id($body['employee_id'], 'employee_id');
         requireEmployeeAccess($employeeId);

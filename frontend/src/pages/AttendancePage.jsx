@@ -30,6 +30,19 @@ function AttendancePage() {
   const [policyLoading, setPolicyLoading] = useState(true)
   const [policySaving, setPolicySaving] = useState('')
   const [policyForm, setPolicyForm] = useState(null)
+  const [today, setToday] = useState({ ready: false, record: null, error: '' })
+
+  const loadToday = useCallback(async () => {
+    if (!isEmployee) return
+    try {
+      const response = await apiClient.get('/api/attendance/get.php', { params: { today: 1, limit: 1 } })
+      setToday({ ready: true, record: response.data.data?.[0] || null, error: '' })
+    } catch (requestError) {
+      setToday({ ready: false, record: null, error: getErrorMessage(requestError, 'Today’s attendance is unavailable.') })
+    }
+  }, [isEmployee])
+
+  useEffect(() => { void Promise.resolve().then(loadToday) }, [loadToday])
 
   const loadPolicy = useCallback(async () => {
     setPolicyLoading(true)
@@ -92,9 +105,10 @@ function AttendancePage() {
     try {
       const response = await apiClient.post(endpoint, {})
       setSuccess(response.data.message || 'Attendance action completed successfully.')
-      await loadRecords()
+      await Promise.all([loadRecords(), loadToday()])
     } catch (requestError) {
       setError(getErrorMessage(requestError, 'The attendance action could not be completed.'))
+      await loadToday()
     } finally {
       setAction('')
     }
@@ -215,7 +229,14 @@ function AttendancePage() {
             {!isEmployee && <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee ID</span><input className="field-input" type="number" min="1" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder="All employees" /></label>}
             <label><span className="mb-2 block text-sm font-medium text-slate-700">Date</span><input className="field-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
             <label><span className="mb-2 block text-sm font-medium text-slate-700">Status</span><select className="field-input" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{attendanceStatuses.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
-            {isEmployee && <div className="flex flex-wrap gap-3"><button type="button" disabled={Boolean(action) || loading} onClick={() => runAction('check-in', '/api/attendance/check-in.php')} className="action-button-primary">{action === 'check-in' ? 'Checking in...' : 'Check in'}</button><button type="button" disabled={Boolean(action) || loading} onClick={() => runAction('check-out', '/api/attendance/check-out.php')} className="action-button-secondary">{action === 'check-out' ? 'Checking out...' : 'Check out'}</button></div>}
+          {isEmployee && <div className="space-y-2">
+            <div className="flex flex-wrap gap-3">
+              <button type="button" disabled={Boolean(action) || !today.ready || Boolean(today.record)} onClick={() => runAction('check-in', '/api/attendance/check-in.php')} className="action-button-primary">{action === 'check-in' ? 'Checking in…' : 'Check in'}</button>
+              <button type="button" disabled={Boolean(action) || !today.ready || !today.record?.check_in || Boolean(today.record?.check_out)} onClick={() => runAction('check-out', '/api/attendance/check-out.php')} className="action-button-secondary">{action === 'check-out' ? 'Checking out…' : 'Check out'}</button>
+            </div>
+            {today.error ? <p role="alert" className="text-sm text-rose-800">{today.error} <button type="button" onClick={loadToday} className="font-semibold underline">Retry</button></p>
+              : <p role="status" className="text-sm text-slate-600">{!today.ready ? 'Checking today’s attendance…' : today.record?.check_out ? 'You’ve checked out for today.' : today.record?.check_in ? 'Checked in. Check out at the end of your shift.' : today.record ? 'An attendance record already exists for today.' : 'Check in before you can check out.'}</p>}
+          </div>}
           </div>
           {isEmployee ? <p className="mt-4 rounded-xl border border-[#ffd1dc] bg-[#fff7f9] px-4 py-3 text-sm text-slate-700">Check-in confirms the account action, but location is currently marked <strong>Unverified</strong>. The system does not claim that the employee is physically at work.</p> : <p className="mt-4 text-sm text-slate-600">Managers see assigned employees only. Admin and HR can review organisation-wide attendance.</p>}
         </section>

@@ -28,6 +28,7 @@ final class OnboardingAccess
         'api/announcements/get.php',
         'api/configuration/get.php',
         'api/configuration/work-policy.php',
+        'api/calendar/get.php',
         'api/self-service/profile.php',
         'api/self-service/update-profile.php',
         'api/self-service/onboarding.php',

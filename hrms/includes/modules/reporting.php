@@ -1,7 +1,9 @@
 <?php
 $b=HRMS_METHOD==='POST'?input():$_GET;
 if ($section==='notifications') {
-    if ($action==='get') reply(rows('SELECT notification_id,title,entity,entity_id,read_at,created_at FROM notifications WHERE user_id=? ORDER BY notification_id DESC'.pageLimit(),[(int)$_SESSION['user_id']]));
+    if ($action==='get') reply(rows("SELECT n.notification_id,n.title,n.entity,n.entity_id,n.read_at,n.created_at,i.application_id
+        FROM notifications n LEFT JOIN interviews i ON n.entity='interviews' AND n.entity_id=i.interview_id
+        WHERE n.user_id=? ORDER BY n.notification_id DESC".pageLimit(),[(int)$_SESSION['user_id']]));
     $id=id($b['notification_id']??null); $n=one('SELECT notification_id FROM notifications WHERE notification_id=? AND user_id=?',[$id,(int)$_SESSION['user_id']]); if (!$n) fail(404,'Notification not found.');
     query('UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE notification_id=? AND user_id=?',[$id,(int)$_SESSION['user_id']]); reply(['notification_id'=>$id]);
 }

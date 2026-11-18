@@ -22,7 +22,7 @@ apiClient.interceptors.request.use((config) => {
 // Backend gates: a temporary password or an unfinished onboarding limits what an
 // account may reach. Send the person to the page that fixes it instead of
 // showing a generic error. Only redirect from pages that are not already open.
-const openDuringOnboarding = ['/dashboard', '/onboarding', '/documents', '/attendance', '/change-password']
+const openDuringOnboarding = ['/dashboard', '/onboarding', '/documents', '/attendance', '/calendar', '/help', '/change-password']
 
 function flagStoredUser(flag) {
   try {

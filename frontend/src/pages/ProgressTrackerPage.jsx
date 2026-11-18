@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
 
 function readStoredUser() {
@@ -13,6 +13,8 @@ function isComplete(value) {
 function ProgressTrackerPage() {
   const user = readStoredUser()
   const role = user?.role_name || 'Employee'
+  const [query] = useSearchParams()
+  const requested = query.get('record') || ''
   const canManage = ['Admin', 'HR', 'Manager'].includes(role)
   const [onboarding, setOnboarding] = useState([])
   const [goals, setGoals] = useState([])
@@ -33,7 +35,7 @@ function ProgressTrackerPage() {
       apiClient.get('/api/onboarding/get.php'),
       apiClient.get('/api/performance/goals/get.php'),
       apiClient.get('/api/training/enrollments.php'),
-      apiClient.get('/api/progress/get.php'),
+      apiClient.get('/api/progress/get.php', { params: { record_id: /^[1-9]\d*$/.test(requested) ? requested : undefined } }),
     ]
     if (canManage) requests.push(apiClient.get('/api/employees/get.php', { params: { status: 'Active', limit: 200 } }))
 
@@ -53,16 +55,17 @@ function ProgressTrackerPage() {
       setState('error')
     })
     return () => { active = false }
-  }, [canManage, refreshKey, user?.employee_id])
+  }, [canManage, refreshKey, requested, user?.employee_id])
 
   const summaryMilestones = useMemo(() => {
     const latest = onboarding[0]
-    const documents = latest?.documents || []
+    const totalDocuments = onboarding.reduce((sum, record) => sum + Number(record.requirements?.documents_total || 0), 0)
+    const verifiedDocuments = onboarding.reduce((sum, record) => sum + Number(record.requirements?.documents_verified || 0), 0)
     const completedGoals = goals.filter((goal) => goal.status === 'Completed').length
     const completedTraining = training.filter((item) => item.status === 'Completed').length
     return [
       { name: 'Onboarding workflow', progress: latest?.onboarding_status === 'Completed' ? 100 : Number(latest?.verification_percentage || 0), detail: latest?.onboarding_status || 'Not started' },
-      { name: 'Document verification', progress: documents.length ? Math.round(100 * documents.filter((item) => item.document_status === 'Verified').length / documents.length) : 0, detail: `${documents.filter((item) => item.document_status === 'Verified').length} of ${documents.length} verified` },
+      { name: 'Document verification', progress: totalDocuments ? Math.round(100 * verifiedDocuments / totalDocuments) : 0, detail: `${verifiedDocuments} of ${totalDocuments} verified` },
       { name: 'Performance goals', progress: goals.length ? Math.round(goals.reduce((sum, goal) => sum + Number(goal.progress || 0), 0) / goals.length) : 0, detail: `${completedGoals} of ${goals.length} completed` },
       { name: 'Training assignments', progress: training.length ? Math.round(100 * completedTraining / training.length) : 0, detail: `${completedTraining} of ${training.length} completed` },
     ]
