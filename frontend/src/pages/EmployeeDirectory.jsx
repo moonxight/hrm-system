@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
 
 const emptyEmployeeForm = {
@@ -20,6 +20,24 @@ const emptyEmployeeForm = {
   basic_salary: '',
   create_account: false,
   username: '',
+  application_id: '',
+}
+
+function employeeFromOffer(previous, offer) {
+  if (!offer) return { ...previous, application_id: '' }
+  const [firstName, ...rest] = offer.full_name.trim().split(/\s+/)
+  return {
+    ...previous,
+    application_id: offer.application_id,
+    first_name: firstName,
+    middle_name: '',
+    last_name: rest.join(' '),
+    email: offer.email,
+    phone: offer.phone || '',
+    department_id: offer.department_id,
+    position_id: offer.position_id,
+    create_account: true,
+  }
 }
 
 function EmployeeDirectory() {
@@ -38,6 +56,31 @@ function EmployeeDirectory() {
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [newAccount, setNewAccount] = useState(null)
+  const [offers, setOffers] = useState([])
+  const [offerError, setOfferError] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedOffer = searchParams.get('offer')
+
+  useEffect(() => {
+    if (!canManageEmployees) return undefined
+    let active = true
+    apiClient.get('/api/recruitment/applications.php', { params: { status: 'Offered', limit: 200 } })
+      .then((response) => {
+        if (active) {
+          setOffers(response.data.data || [])
+          setOfferError('')
+          if (requestedOffer) {
+            const offer = response.data.data.find((record) => String(record.application_id) === requestedOffer)
+            if (offer) setEmployeeForm((previous) => employeeFromOffer(previous, offer))
+            else setOfferError('This offer is no longer available. Select another offer or enter the employee manually.')
+          }
+        }
+      })
+      .catch((requestError) => {
+        if (active) setOfferError(requestError.response?.data?.message || 'Recruitment offers could not be loaded.')
+      })
+    return () => { active = false }
+  }, [canManageEmployees, refreshKey, requestedOffer])
 
   useEffect(() => {
     let isActive = true
@@ -109,6 +152,12 @@ function EmployeeDirectory() {
     }))
   }
 
+  const selectOffer = (event) => {
+    const offer = offers.find((candidate) => String(candidate.application_id) === event.target.value)
+    if (requestedOffer) setSearchParams({}, { replace: true })
+    setEmployeeForm((previous) => employeeFromOffer(previous, offer))
+  }
+
   const beginEdit = (employee) => {
     setEditingEmployeeId(employee.employee_id)
     setEmployeeForm({
@@ -138,6 +187,7 @@ function EmployeeDirectory() {
   const resetEmployeeForm = () => {
     setEditingEmployeeId(null)
     setEmployeeForm(emptyEmployeeForm)
+    if (requestedOffer) setSearchParams({}, { replace: true })
   }
 
   const saveEmployee = async (event) => {
@@ -147,7 +197,7 @@ function EmployeeDirectory() {
     setSuccess('')
     try {
       const endpoint = editingEmployeeId ? '/api/employees/update.php' : '/api/employees/create.php'
-      const { basic_salary: basicSalary, create_account: createAccount, username, ...employeeFields } = employeeForm
+      const { basic_salary: basicSalary, create_account: createAccount, application_id: applicationId, username, ...employeeFields } = employeeForm
       const response = await apiClient.post(endpoint, {
         ...employeeFields,
         date_of_birth: employeeForm.date_of_birth || null,
@@ -155,12 +205,13 @@ function EmployeeDirectory() {
         department_id: Number(employeeForm.department_id),
         position_id: Number(employeeForm.position_id),
         ...(editingEmployeeId ? { employee_id: editingEmployeeId } : {
+          ...(applicationId ? { application_id: applicationId } : {}),
           ...(basicSalary ? { basic_salary: basicSalary } : {}),
           ...(createAccount ? { create_account: true, ...(username ? { username } : {}) } : {}),
         }),
       })
       setNewAccount(response.data?.data?.account || null)
-      setSuccess(editingEmployeeId ? 'Employee information updated.' : 'Employee record created.')
+      setSuccess(editingEmployeeId ? 'Employee information updated.' : applicationId ? 'Applicant hired and onboarding checklist created.' : 'Employee record created.')
       resetEmployeeForm()
       setRefreshKey((value) => value + 1)
     } catch (requestError) {
@@ -231,7 +282,18 @@ function EmployeeDirectory() {
             </div>
 
             <form onSubmit={saveEmployee} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee number</span><input required name="employee_number" value={employeeForm.employee_number} onChange={handleEmployeeFormChange} placeholder="e.g. FIN-001" className="field-input" /></label>
+              {!editingEmployeeId && (
+                <label className="md:col-span-2 xl:col-span-4">
+                  <span className="mb-2 block text-sm font-medium text-slate-700">Start from a recruitment offer</span>
+                  <select value={employeeForm.application_id} onChange={selectOffer} className="field-input">
+                    <option value="">Enter employee details manually</option>
+                    {offers.map((offer) => <option key={offer.application_id} value={offer.application_id}>{offer.full_name} — {offer.title}</option>)}
+                  </select>
+                  {offerError && <span className="mt-1 block text-sm text-red-700">{offerError}</span>}
+                  {employeeForm.application_id && <span className="mt-1 block text-sm text-slate-600">Review the suggested details before saving. Saving marks the applicant hired and opens their onboarding checklist.</span>}
+                </label>
+              )}
+              <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee number</span><input readOnly value={employeeForm.employee_number || (editingEmployeeId ? 'Legacy record' : 'Assigned when saved')} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">First name</span><input required name="first_name" value={employeeForm.first_name} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Middle name</span><input name="middle_name" value={employeeForm.middle_name} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Last name</span><input required name="last_name" value={employeeForm.last_name} onChange={handleEmployeeFormChange} className="field-input" /></label>

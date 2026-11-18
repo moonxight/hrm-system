@@ -4,22 +4,43 @@ if ($action==='get') {
     requireLogin();
     $params=[];
     $where=scope('p.employee_id',$params);
+    if (($_SESSION['role_name'] ?? '') === 'Manager') {
+        $where = "({$where} OR p.employee_id=?)";
+        $params[] = ownEmployee();
+    }
+    if (!isAdminOrHR()) {
+        $where .= " AND p.payroll_status='Processed'";
+    }
+    if (($_SESSION['role_name'] ?? '') !== 'Employee' && isset($b['employee_id']) && $b['employee_id'] !== '') {
+        $where .= ' AND p.employee_id=?';
+        $params[] = id($b['employee_id'], 'employee_id');
+    }
+    $paymentDetails = isAdminOrHR() ? ',pp.payment_method,pp.payment_reference' : '';
     $records=rows(
         'SELECT p.*,CONCAT(e.first_name,\' \',e.last_name) employee_name,e.employee_number,'
         . 'pa.working_days,pa.days_present,pa.days_absent,pa.days_on_leave,pa.days_late,'
-        . 'pa.expected_hours,pa.hours_worked,pa.overtime_hours,pa.shortfall_hours '
+        . 'pa.expected_hours,pa.hours_worked,pa.overtime_hours,pa.shortfall_hours,pp.paid_on AS payment_recorded_on'
+        . $paymentDetails . ' '
         . 'FROM payroll p JOIN employees e ON e.employee_id=p.employee_id '
         . 'LEFT JOIN payroll_attendance pa ON pa.payroll_id=p.payroll_id '
+        . 'LEFT JOIN payroll_payments pp ON pp.payroll_id=p.payroll_id '
         . "WHERE {$where} ORDER BY p.payroll_id DESC".pageLimit(),
         $params
     );
-    reply($records,'Payroll records retrieved.');
+    foreach ($records as &$record) {
+        $record['payment_date'] = $record['payment_recorded_on'];
+    }
+    unset($record);
+    reply($records,'Payroll records retrieved.',200,['count'=>count($records)]);
 }
 if ($action==='get-items') {
     requireLogin();
     $id=id($b['payroll_id'] ?? null,'payroll_id');
     $payroll=record('payroll','payroll_id',$id);
     requireEmployeeAccess((int)$payroll['employee_id']);
+    if (!isAdminOrHR() && $payroll['payroll_status'] !== 'Processed') {
+        fail(404, 'This payslip is not available.');
+    }
     $items=rows('SELECT * FROM payroll_items WHERE payroll_id=? ORDER BY payroll_item_id',[$id]);
     reply($items,'Payroll items retrieved successfully.',200,['payroll_id'=>$id,'items'=>$items,'total_items'=>count($items)]);
 }
@@ -101,13 +122,38 @@ if ($action==='create') {
             . "JOIN payroll_components pc ON pc.payroll_component_id=epc.payroll_component_id "
             . "WHERE epc.employee_id=? AND epc.status='Active' AND pc.status='Active' "
             . "AND epc.effective_from<=? AND (epc.effective_to IS NULL OR epc.effective_to>=?)",
-            [$id,$basic,$employee,$end,$start]
+            [$id,$basic,$employee,$end,$end]
         );
         audit('payroll.created','payroll',$id,['employee_id'=>$employee,'pay_period_start'=>$start,'pay_period_end'=>$end]);
         return record('payroll','payroll_id',$id);
     }); reply($p,'Payroll created successfully.',200,$p);
 }
 $id=id($b['payroll_id'] ?? null,'payroll_id');
+if ($action === 'record-payment') {
+    $paidOn = dateValue($b['paid_on'] ?? null, 'paid_on');
+    $method = choice($b['payment_method'] ?? null, ['Bank transfer', 'Mobile money', 'Cash', 'Cheque'], 'payment method');
+    $reference = textValue($b['payment_reference'] ?? null, 'payment_reference', 100);
+    if ($paidOn > date('Y-m-d')) fail(400, 'Payment date cannot be in the future.');
+
+    $payment = transaction(function () use ($id, $paidOn, $method, $reference) {
+        $payroll = record('payroll', 'payroll_id', $id, true);
+        if ($payroll['payroll_status'] !== 'Processed') fail(409, 'Process this payroll before recording payment.');
+        if ($paidOn < $payroll['pay_period_start']) fail(400, 'Payment date cannot be before the pay period starts.');
+        $existing = one('SELECT paid_on,payment_method,payment_reference FROM payroll_payments WHERE payroll_id=?', [$id]);
+        if ($existing) {
+            if ($existing === ['paid_on' => $paidOn, 'payment_method' => $method, 'payment_reference' => $reference]) return $existing;
+            fail(409, 'A payment is already recorded for this payroll.');
+        }
+        query('INSERT INTO payroll_payments(payroll_id,paid_on,payment_method,payment_reference,amount,currency,recorded_by)
+            VALUES (?,?,?,?,?,?,?)',
+            [$id, $paidOn, $method, $reference, $payroll['net_salary'], $payroll['currency'], (int) $_SESSION['user_id']]);
+        query('UPDATE payroll SET payment_date=? WHERE payroll_id=?', [$paidOn, $id]);
+        audit('payroll.payment-recorded', 'payroll', $id);
+        notifyEmployee((int) $payroll['employee_id'], 'Payroll payment recorded', 'payroll', $id);
+        return ['paid_on' => $paidOn, 'payment_method' => $method, 'payment_reference' => $reference];
+    });
+    reply(['payroll_id' => $id, 'payment_recorded_on' => $payment['paid_on']] + $payment, 'Payment recorded.');
+}
 $p=transaction(function() use($action,$id,$b) {
     $p=record('payroll','payroll_id',$id,true);
     if ($p['payroll_status']!=='Draft') fail(409,'Only Draft payroll can be changed or processed.');
@@ -120,11 +166,13 @@ $p=transaction(function() use($action,$id,$b) {
     }
     // SQL DECIMAL arithmetic prevents binary floating-point accumulation for money.
     $totals=one("SELECT COALESCE(SUM(CASE WHEN item_type='Allowance' THEN amount ELSE 0 END),0) allowances,COALESCE(SUM(CASE WHEN item_type='Deduction' THEN amount ELSE 0 END),0) deductions FROM payroll_items WHERE payroll_id=?",[$id]);
-    query('UPDATE payroll SET total_allowances=?,total_deductions=?,gross_salary=basic_salary+?,net_salary=basic_salary+?-? WHERE payroll_id=?',[$totals['allowances'],$totals['deductions'],$totals['allowances'],$totals['allowances'],$totals['deductions'],$id]);
+    $updated = query('UPDATE payroll SET total_allowances=?,total_deductions=?,gross_salary=basic_salary+?,net_salary=basic_salary+?-?
+        WHERE payroll_id=? AND basic_salary+CAST(? AS NUMERIC)>=CAST(? AS NUMERIC)',
+        [$totals['allowances'],$totals['deductions'],$totals['allowances'],$totals['allowances'],$totals['deductions'],$id,$totals['allowances'],$totals['deductions']]);
+    if ($updated->affected_rows === 0) fail(409,'Deductions cannot exceed gross salary.');
     $p=record('payroll','payroll_id',$id);
-    if ((float)$p['net_salary']<0) fail(409,'Deductions cannot exceed gross salary.');
     if ($action==='process') {
-        query("UPDATE payroll SET payroll_status='Processed',payment_date=CURRENT_DATE,processed_by=?,processed_at=CURRENT_TIMESTAMP WHERE payroll_id=?",[(int)$_SESSION['user_id'],$id]);
+        query("UPDATE payroll SET payroll_status='Processed',processed_by=?,processed_at=CURRENT_TIMESTAMP WHERE payroll_id=?",[(int)$_SESSION['user_id'],$id]);
         $a=one(
             "WITH target AS ("
             . "SELECT COALESCE(e.work_policy_id,(SELECT work_policy_id FROM work_policies WHERE status='Active' LIMIT 1)) work_policy_id "

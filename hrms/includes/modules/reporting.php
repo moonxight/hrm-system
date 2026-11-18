@@ -15,16 +15,31 @@ if ($section==='audit') { requireRole(['Admin']); reply(rows('SELECT audit_id,us
 requireRole(['Admin','HR']);
 $start=dateValue($b['start_date']??date('Y-01-01')); $end=dateValue($b['end_date']??date('Y-12-31')); if ($start>$end) fail(400,'Invalid report range.');
 $employees=one("SELECT COUNT(*) total,SUM(CASE WHEN employment_status='Active' THEN 1 ELSE 0 END) active FROM employees");
-$attendance=one("SELECT COUNT(*) records,COALESCE(SUM(CASE WHEN status IN ('Present','Late','Present (Half Day)','Late (Half Day)','Half-Day') THEN 1 ELSE 0 END),0) attended,COALESCE(SUM(hours_worked),0) hours FROM attendance WHERE attendance_date BETWEEN ? AND ?",[$start,$end]);
+$attended = "status IN ('Present','Late','Present (Half Day)','Late (Half Day)','Half-Day','Half Day','Early Checkout')";
+$attendance=one("SELECT COUNT(*) records, COUNT(*) FILTER (WHERE {$attended}) AS attended,
+    COALESCE(SUM(hours_worked),0) hours FROM attendance WHERE attendance_date BETWEEN ? AND ?",[$start,$end]);
 $attendance['rate_recorded_days_percent']=$attendance['records']?round(100*(int)$attendance['attended']/(int)$attendance['records'],2):0;
 $attendance['definition']='Present, Late or Half-Day records / all recorded attendance days. Not a scheduled-workday measure.';
+$attendanceTrend = rows("SELECT DATE_TRUNC('week', attendance_date)::DATE AS week,
+    COUNT(*) FILTER (WHERE {$attended}) AS attended,
+    COUNT(*) FILTER (WHERE status='On Leave') AS on_leave,
+    COUNT(*) FILTER (WHERE status='Absent') AS absent
+    FROM attendance WHERE attendance_date BETWEEN ? AND ?
+    GROUP BY DATE_TRUNC('week', attendance_date) ORDER BY week", [$start,$end]);
 reply([
  'period'=>['start_date'=>$start,'end_date'=>$end], 'employees'=>$employees,
  'departments'=>rows('SELECT d.department_id,d.department_name,COUNT(e.employee_id) employees FROM departments d LEFT JOIN employees e ON e.department_id=d.department_id GROUP BY d.department_id,d.department_name'),
  'positions'=>rows('SELECT p.position_id,p.position_name,COUNT(e.employee_id) employees FROM positions p LEFT JOIN employees e ON e.position_id=p.position_id GROUP BY p.position_id,p.position_name'),
  'attendance'=>$attendance,
+ 'attendance_trend'=>$attendanceTrend,
  'leave'=>rows('SELECT status,COUNT(*) requests,SUM(number_of_days) days FROM leave_requests WHERE start_date<=? AND end_date>=? GROUP BY status',[$end,$start]),
- 'payroll'=>rows("SELECT TO_CHAR(pay_period_start,'YYYY-MM') period,COUNT(*) records,SUM(gross_salary) gross,SUM(total_deductions) deductions,SUM(net_salary) net FROM payroll WHERE payroll_status IN ('Processed','Paid') AND pay_period_start BETWEEN ? AND ? GROUP BY TO_CHAR(pay_period_start,'YYYY-MM')",[$start,$end]),
+ 'payroll'=>rows("SELECT TO_CHAR(p.pay_period_start,'YYYY-MM') AS period, COUNT(*) AS records,
+     SUM(p.gross_salary) AS gross, SUM(p.total_deductions) AS deductions, SUM(p.net_salary) AS net,
+     COALESCE(SUM(pp.amount),0) AS paid,
+     COALESCE(SUM(p.net_salary) FILTER (WHERE pp.payroll_id IS NULL),0) AS outstanding
+     FROM payroll p LEFT JOIN payroll_payments pp ON pp.payroll_id=p.payroll_id
+     WHERE p.payroll_status IN ('Processed','Paid') AND p.pay_period_start BETWEEN ? AND ?
+     GROUP BY TO_CHAR(p.pay_period_start,'YYYY-MM') ORDER BY period",[$start,$end]),
  'benefits'=>rows('SELECT status,COUNT(*) assignments,SUM(amount) amount FROM employee_benefits GROUP BY status'),
  'onboarding'=>rows('SELECT onboarding_status status,COUNT(*) records FROM onboarding GROUP BY onboarding_status'),
  'recruitment'=>rows('SELECT status,COUNT(*) applications FROM job_applications GROUP BY status'),

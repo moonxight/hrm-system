@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { isLockedByOnboarding, readStoredUser, refreshSession } from '../api/session'
 import ChangePasswordPage from '../pages/ChangePasswordPage'
@@ -13,8 +13,12 @@ import LeavePage from '../pages/LeavePage'
 import LoginPage from '../pages/LoginPage'
 import PayrollPage from '../pages/PayrollPage'
 import PayslipPage from '../pages/PayslipPage'
-import ReportsPage from '../pages/ReportsPage'
-import RoleDashboard from '../pages/RoleDashboard'
+import TermsPage from '../pages/TermsPage'
+
+const ReportsPage = lazy(() => import('../pages/ReportsPage'))
+const RoleDashboard = lazy(() => import('../pages/RoleDashboard'))
+const RecruitmentPage = lazy(() => import('../pages/RecruitmentPage'))
+const AccessPage = lazy(() => import('../pages/AccessPage'))
 
 // The stored onboarding flag can be stale (HR may have completed the onboarding
 // since sign-in), so confirm with the server before turning someone away.
@@ -139,9 +143,11 @@ function AppRouter() {
     <>
     <SessionSync onChange={handleSessionChange} />
     <OnboardingBanner />
+    <Suspense fallback={<p className="p-6 text-sm text-slate-600" role="status">Loading workspace…</p>}>
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/terms" element={<TermsPage />} />
       <Route path="/change-password" element={<ProtectedRoute><ChangePasswordPage /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager', 'Employee']}><RoleDashboard /></RoleProtectedRoute></ProtectedRoute>} />
       <Route path="/dashboard/employee" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Employee']}><EmployeeDashboard /></RoleProtectedRoute></ProtectedRoute>} />
@@ -155,7 +161,10 @@ function AppRouter() {
       <Route path="/payroll" element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
       <Route path="/payslip" element={<ProtectedRoute><PayslipPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR']}><ReportsPage /></RoleProtectedRoute></ProtectedRoute>} />
+      <Route path="/recruitment" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager']}><RecruitmentPage /></RoleProtectedRoute></ProtectedRoute>} />
+      <Route path="/access" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin']}><AccessPage /></RoleProtectedRoute></ProtectedRoute>} />
     </Routes>
+    </Suspense>
     </>
   )
 }

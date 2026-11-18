@@ -112,7 +112,7 @@ function PayslipPage() {
               <label className="block max-w-md">
                 <span className="mb-2 block text-sm font-medium text-slate-700">Payroll record</span>
                 <select value={selectedPayroll?.payroll_id || ''} onChange={(event) => setSelectedPayroll(payrollRecords.find((record) => String(record.payroll_id) === event.target.value) || null)} className="field-input">
-                  {payrollRecords.map((record) => <option key={record.payroll_id} value={record.payroll_id}>#{record.payroll_id} · {record.employee_name || `Employee ${record.employee_id}`} · {record.payroll_status}</option>)}
+                  {payrollRecords.map((record) => <option key={record.payroll_id} value={record.payroll_id}>#{record.payroll_id} � {record.employee_name || `Employee ${record.employee_id}`} � {record.payroll_status}</option>)}
                 </select>
               </label>
             </section>
@@ -128,7 +128,7 @@ function PayslipPage() {
                     <p className="mt-2 text-sm text-slate-600">Pay period: {selectedPayroll.pay_period_start} to {selectedPayroll.pay_period_end}</p>
                   </div>
                   <div className="flex items-start gap-3">
-                    <div className="text-left text-sm sm:text-right"><p className="text-slate-500">Payroll status</p><p className="mt-1 font-semibold text-slate-900">{selectedPayroll.payroll_status}</p><p className="mt-3 text-slate-500">Payment date</p><p className="mt-1 font-semibold text-slate-900">{selectedPayroll.payment_date || 'Not processed'}</p></div>
+                    <div className="text-left text-sm sm:text-right"><p className="text-slate-500">Payroll status</p><p className="mt-1 font-semibold text-slate-900">{selectedPayroll.payment_recorded_on ? 'Paid' : selectedPayroll.payroll_status}</p><p className="mt-3 text-slate-500">Payment date</p><p className="mt-1 font-semibold text-slate-900">{selectedPayroll.payment_recorded_on || 'No payment recorded'}</p></div>
                     <button type="button" onClick={() => window.print()} className="action-button-secondary print:hidden">Print Payslip</button>
                   </div>
                 </div>

@@ -1,6 +1,14 @@
 <?php
 requireRole(['Admin','HR','Manager']); $b=HRMS_METHOD==='POST'?input():$_GET;
 function vacancyAccess(array $v): void { if (!isAdminOrHR() && (int)$v['manager_employee_id']!==ownEmployee()) fail(403,'Vacancy is not assigned to you.'); }
+if ($action === 'interviewers') {
+    requireRole(['Admin', 'HR']);
+    reply(rows("SELECT e.employee_id, CONCAT(e.first_name, ' ', e.last_name) AS display_name, r.role_name
+        FROM users u JOIN roles r ON r.role_id=u.role_id JOIN employees e ON e.employee_id=u.employee_id
+        WHERE u.account_status='Active' AND e.employment_status='Active'
+            AND r.role_name IN ('Admin', 'HR', 'Manager')
+        ORDER BY e.first_name, e.last_name"));
+}
 if ($action==='vacancies') {
     $params=[]; $where='1=1'; if (!isAdminOrHR()) { $where='manager_employee_id=?'; $params[]=ownEmployee(); }
     if (isset($b['status'])) { $where.=' AND status=?'; $params[]=choice($b['status'],['Draft','Open','Closed','Filled','Cancelled']); }
@@ -10,7 +18,15 @@ if ($action==='applications') {
     $params=[]; $where='1=1'; if (!isAdminOrHR()) { $where='v.manager_employee_id=?'; $params[]=ownEmployee(); }
     if (isset($b['vacancy_id'])) { $where.=' AND v.vacancy_id=?'; $params[]=id($b['vacancy_id']); }
     if (isset($b['application_id'])) { $where.=' AND a.application_id=?'; $params[]=id($b['application_id']); }
-    reply(rows("SELECT a.*,p.full_name,p.email,p.phone,v.title FROM job_applications a JOIN applicants p ON p.applicant_id=a.applicant_id JOIN job_vacancies v ON v.vacancy_id=a.vacancy_id WHERE $where ORDER BY a.application_id DESC".pageLimit(),$params));
+    if (isset($b['status'])) {
+        $status = choice($b['status'], ['Submitted','Shortlisted','Interview','Offered','Hired','Rejected','Withdrawn']);
+        $where .= ' AND a.status=?';
+        $params[] = $status;
+        if ($status === 'Offered') $where .= " AND v.status NOT IN ('Filled','Cancelled')";
+    }
+    reply(rows("SELECT a.*,p.full_name,p.email,p.phone,v.title,v.department_id,v.position_id
+        FROM job_applications a JOIN applicants p ON p.applicant_id=a.applicant_id
+        JOIN job_vacancies v ON v.vacancy_id=a.vacancy_id WHERE $where ORDER BY a.application_id DESC".pageLimit(),$params));
 }
 if ($action==='interviews' || $action==='history') {
     $id=id($b['application_id']??null); $a=record('job_applications','application_id',$id); vacancyAccess(record('job_vacancies','vacancy_id',(int)$a['vacancy_id']));

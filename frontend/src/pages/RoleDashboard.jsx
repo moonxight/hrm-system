@@ -5,6 +5,14 @@ import DashboardInsights from '../components/DashboardInsights'
 import WorkspaceDashboard from '../components/WorkspaceDashboard'
 
 const sharedModules = {
+  recruitment: {
+    title: 'Recruitment',
+    description: 'Manage vacancies, interviews, offers and hiring.',
+    href: '/recruitment',
+    internal: true,
+    availability: 'Available',
+    icon: 'people',
+  },
   directory: {
     title: 'Employee Directory',
     description: 'Open the employee records workspace.',
@@ -96,13 +104,8 @@ const roleDashboardContent = {
     modules: [
       sharedModules.directory,
       sharedModules.reports,
-      {
-        title: 'Admin Access Check',
-        description: 'Verify administrator access against the secure backend.',
-        href: '/api/test-admin.php',
-        availability: 'Available',
-        icon: 'shield',
-      },
+      sharedModules.recruitment,
+      { title: 'People access', description: 'Create accounts and manage roles and access.', href: '/access', internal: true, availability: 'Available', icon: 'shield' },
       sharedModules.payroll,
       sharedModules.payslip,
       sharedModules.leave,
@@ -121,12 +124,7 @@ const roleDashboardContent = {
     modules: [
       sharedModules.directory,
       sharedModules.reports,
-      {
-        title: 'HR Management Tools',
-        description: 'Advanced HR-only workflows will appear when their protected API is available.',
-        availability: 'Backend dependency',
-        icon: 'shield',
-      },
+      sharedModules.recruitment,
       sharedModules.payroll,
       sharedModules.payslip,
       sharedModules.leave,
@@ -144,6 +142,7 @@ const roleDashboardContent = {
     insightsScope: 'team',
     modules: [
       sharedModules.directory,
+      sharedModules.recruitment,
       {
         title: 'Team Overview',
         description: 'Team reporting will appear when the manager-specific API is available.',
@@ -203,6 +202,9 @@ function organizationInsights(data) {
   const leaveRows = Array.isArray(data?.leave) ? data.leave : []
   const departmentRows = Array.isArray(data?.departments) ? data.departments : []
   const payrollRows = Array.isArray(data?.payroll) ? data.payroll : []
+  const attendanceTrend = Array.isArray(data?.attendance_trend) ? data.attendance_trend : []
+  const pipeline = ['Submitted', 'Shortlisted', 'Interview', 'Offered', 'Hired']
+    .map((name) => ({ name, count: Number(data?.recruitment?.find((row) => row.status === name)?.applications || 0) }))
   const payrollTotal = sumValues(payrollRows, 'net')
   const leaveTotal = sumValues(leaveRows, 'requests')
   const pendingLeave = leaveRows.find((row) => row?.status === 'Pending')
@@ -228,7 +230,7 @@ function organizationInsights(data) {
       },
       {
         label: 'Finalized net payroll',
-        value: payrollTotal === null ? 'Unavailable' : formatAmount(payrollTotal),
+        value: payrollTotal === null ? 'Unavailable' : `ZMW ${formatAmount(payrollTotal)}`,
         detail: `Available period: ${data?.period?.start_date || '—'} to ${data?.period?.end_date || '—'}`,
       },
     ],
@@ -252,13 +254,38 @@ function organizationInsights(data) {
         series: [{ key: 'requests', label: 'Requests' }],
       },
       {
-        title: 'Monthly finalized net payroll',
-        type: 'line',
+        title: 'Monthly payroll settlement',
+        description: 'Confirmed payments and amounts still awaiting a payment record.',
+        type: 'bar',
+        stacked: true,
+        currency: 'ZMW',
         xKey: 'period',
         data: payrollRows
-          .map((row) => ({ period: row?.period || 'Unknown', net: numericValue(row?.net) }))
-          .filter((row) => row.net !== null),
-        series: [{ key: 'net', label: 'Net payroll' }],
+          .map((row) => ({ period: row.period, paid: Number(row.paid), outstanding: Number(row.outstanding) })),
+        series: [{ key: 'paid', label: 'Payment recorded', color: '#187c68' }, { key: 'outstanding', label: 'Awaiting record', color: '#777fb9' }],
+      },
+      {
+        title: 'Attendance by week',
+        description: 'Recorded employee-days, grouped by week starting Monday.',
+        type: 'bar',
+        stacked: true,
+        xKey: 'week',
+        data: attendanceTrend.map((row) => ({
+          week: row.week.slice(5), attended: Number(row.attended), on_leave: Number(row.on_leave), absent: Number(row.absent),
+        })),
+        series: [
+          { key: 'attended', label: 'Attended', color: '#5269aa' },
+          { key: 'on_leave', label: 'On leave', color: '#187c68' },
+          { key: 'absent', label: 'Absent', color: '#c35763' },
+        ],
+      },
+      {
+        title: 'Hiring pipeline',
+        description: 'Applications at each current stage.',
+        type: 'bar',
+        xKey: 'name',
+        data: pipeline.some((row) => row.count > 0) ? pipeline : [],
+        series: [{ key: 'count', label: 'Candidates', color: '#5269aa' }],
       },
     ],
   }
