@@ -27,3 +27,16 @@ The workspace owner distributes the demonstration passwords separately. Database
 ## Prepare another workspace
 
 Apply the schema migrations to an empty database intended for demonstration. Run [the Copperleaf fixture](../database/demo/copperleaf.sql) explicitly with a transaction-local `hrms.demo_password_hashes` map. The fixture requires a generated bcrypt hash for each username and refuses to run when employee or user records already exist. Keep credentials outside source control. Use synthetic documents and keep outbound email in test mode if configured.
+
+## Render verification, 18 November 2026
+
+| Check | Observed result |
+| --- | --- |
+| Sign in with the seven staff accounts | All seven reached their named workspaces. The admin could open People access. |
+| Hire the synthetic applicant Mukuka Musonda from an offer | The application became Hired, employee number `NEX-1013` was assigned, four onboarding requirements were created, and Sales manager Martha Zulu was assigned. |
+| Record a simulated payment for Isaac Chileshe | The reference was saved with one audit event, and Isaac saw Paid and the recorded date in his own payslip. |
+| Check manager scope | Kelvin saw Operations payroll and the Operations vacancy. An attempt to open Sales payroll details returned an access error. Martha saw the Sales vacancy. |
+| Check new-starter and employee access | Grace saw the four onboarding requirements and received an onboarding-required response for payroll. Isaac was denied Grace's document history. Ruth was denied access to user administration. |
+| Check charts and terms | The HR dashboard rendered all five charts using database records. The Terms of use page opened from sign-in. |
+
+The fixture still has a separate open offer for Chipo Nkhoma and a finalized, unpaid payroll example for Ruth Tembo. These are available for the walkthrough.

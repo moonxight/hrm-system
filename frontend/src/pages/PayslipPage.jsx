@@ -112,7 +112,11 @@ function PayslipPage() {
               <label className="block max-w-md">
                 <span className="mb-2 block text-sm font-medium text-slate-700">Payroll record</span>
                 <select value={selectedPayroll?.payroll_id || ''} onChange={(event) => setSelectedPayroll(payrollRecords.find((record) => String(record.payroll_id) === event.target.value) || null)} className="field-input">
-                  {payrollRecords.map((record) => <option key={record.payroll_id} value={record.payroll_id}>#{record.payroll_id} � {record.employee_name || `Employee ${record.employee_id}`} � {record.payroll_status}</option>)}
+                  {payrollRecords.map((record) => (
+                    <option key={record.payroll_id} value={record.payroll_id}>
+                      #{record.payroll_id} · {record.employee_name || `Employee ${record.employee_id}`} · {record.payment_recorded_on ? 'Paid' : record.payroll_status}
+                    </option>
+                  ))}
                 </select>
               </label>
             </section>
