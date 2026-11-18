@@ -39,16 +39,14 @@ if ($files === []) {
     exit(1);
 }
 sort($files, SORT_STRING);
+$applied = $pdo->query('SELECT version FROM schema_migrations');
+$appliedVersions = array_fill_keys($applied->fetchAll(PDO::FETCH_COLUMN), true);
+$applied->closeCursor();
 
 try {
     foreach ($files as $file) {
         $version = basename($file);
-        $check = $pdo->prepare('SELECT 1 FROM schema_migrations WHERE version = ?');
-        $check->execute([$version]);
-
-        $alreadyApplied = $check->fetchColumn();
-        $check->closeCursor();
-        if ($alreadyApplied) {
+        if (isset($appliedVersions[$version])) {
             echo "Already applied: {$version}\n";
             continue;
         }
@@ -58,30 +56,22 @@ try {
             throw new RuntimeException("Could not read migration: {$version}");
         }
 
-        $transactional = $driver === 'pgsql';
-        if ($transactional) {
-            $pdo->beginTransaction();
-        }
-
         try {
-            if ($transactional) {
-                // Send one top-level command, preserving nested PostgreSQL dollar quotes.
+            if ($driver === 'pgsql') {
+                // The migration and its history record commit as one statement.
                 $marker = '$hrms_migration_' . bin2hex(random_bytes(8)) . '$';
                 $body = '$hrms_apply_' . bin2hex(random_bytes(8)) . '$';
-                $pdo->exec("DO {$body} BEGIN EXECUTE {$marker}\n{$sql}\n{$marker}; END {$body}");
+                $versionSql = $pdo->quote($version);
+                $pdo->exec("DO {$body} BEGIN
+                    EXECUTE {$marker}\n{$sql}\n{$marker};
+                    INSERT INTO schema_migrations(version) VALUES ({$versionSql});
+                END {$body}");
             } else {
                 $pdo->exec($sql);
-            }
-            $record = $pdo->prepare('INSERT INTO schema_migrations (version) VALUES (?)');
-            $record->execute([$version]);
-
-            if ($transactional) {
-                $pdo->commit();
+                $record = $pdo->prepare('INSERT INTO schema_migrations (version) VALUES (?)');
+                $record->execute([$version]);
             }
         } catch (Throwable $exception) {
-            if ($transactional && $pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
             throw new RuntimeException("{$version}: " . $exception->getMessage(), 0, $exception);
         }
 
@@ -96,3 +86,4 @@ if ($driver === 'pgsql') {
     $pdo->query('SELECT pg_advisory_unlock(1558124704)')->closeCursor();
 }
 echo "Database migrations are up to date.\n";
+
