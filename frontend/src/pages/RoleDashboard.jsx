@@ -371,18 +371,6 @@ function RoleDashboard() {
   const [managerLeaveYear, setManagerLeaveYear] = useState(currentYear)
   const [managerLeaveStatus, setManagerLeaveStatus] = useState('')
 
-  const handleSignOut = async () => {
-    try {
-      await apiClient.post('/api/auth/logout.php')
-    } catch {
-      // Local credentials are still cleared when the backend is unreachable.
-    } finally {
-      localStorage.removeItem('hrms_user')
-      sessionStorage.removeItem('hrms_csrf_token')
-      navigate('/login', { replace: true })
-    }
-  }
-
   useEffect(() => {
     if (!user) navigate('/login', { replace: true })
   }, [navigate, user])
@@ -593,7 +581,6 @@ function RoleDashboard() {
         filterSummary={filterSummary}
         onResetFilters={resetFilters}
       />}
-      onSignOut={handleSignOut}
     />
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
 import { isLockedByOnboarding, readStoredUser } from '../api/session'
 
@@ -61,7 +61,7 @@ function NotificationMenu({ user }) {
     } catch { setState('error') }
   }
 
-  return <div className="notification-menu" onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false) }}>
+  return <div onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false) }}>
     <button type="button" className="action-button-secondary" aria-expanded={open} aria-label={`Notifications, ${unread} unread`} onClick={() => setOpen(!open)}>Notifications{unread > 0 ? ` (${unread})` : ''}</button>
     {open && <div className="notification-popover" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
       <div className="notification-popover__heading"><strong>Notifications</strong><small>{unread} unread</small></div>
@@ -81,10 +81,26 @@ function NotificationMenu({ user }) {
 export default function WorkspaceNavigation() {
   const user = readStoredUser()
   const location = useLocation()
+  const navigate = useNavigate()
   const menu = useRef(null)
+  const [signingOut, setSigningOut] = useState(false)
   if (!user?.role_name || user.must_change_password || ['/', '/login', '/terms', '/change-password'].includes(location.pathname)) return null
   const available = links.filter(([path, , roles]) => (!roles || roles.includes(user.role_name)) && !isLockedByOnboarding(user, path))
   const here = links.find(([path]) => path === location.pathname)?.[1] || (location.pathname === '/dashboard/employee' ? 'Dashboard' : 'Workspace')
+
+  async function signOut() {
+    setSigningOut(true)
+    try {
+      await apiClient.post('/api/auth/logout.php')
+    } catch {
+      // Clear local credentials even when the server is unavailable.
+    } finally {
+      localStorage.removeItem('hrms_user')
+      sessionStorage.removeItem('hrms_csrf_token')
+      setSigningOut(false)
+      navigate('/login', { replace: true })
+    }
+  }
 
   return <nav className="relative z-40 border-b border-slate-200 bg-white px-3 py-2 sm:px-6 print:hidden" aria-label="Nexa workspace navigation">
     <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
@@ -95,10 +111,15 @@ export default function WorkspaceNavigation() {
         </div>
       </details>
       <span className="mr-auto hidden text-sm font-semibold text-slate-700 sm:inline">{here}</span>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2">
         <NavLink to="/calendar" className="action-button-secondary">Calendar</NavLink>
         <NavLink to="/help" className="action-button-secondary">Help</NavLink>
+      </div>
+      <div className="relative ml-auto flex items-center gap-2 sm:ml-0">
         <NotificationMenu user={user} />
+        <button type="button" onClick={signOut} disabled={signingOut} className="min-h-11 whitespace-nowrap rounded-lg px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:opacity-60">
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </button>
       </div>
     </div>
   </nav>

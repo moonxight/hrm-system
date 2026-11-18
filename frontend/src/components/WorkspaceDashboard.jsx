@@ -76,11 +76,6 @@ const iconPaths = {
       <path d="M8 10V7a4 4 0 0 1 8 0v3" />
     </>
   ),
-  logout: (
-    <>
-      <path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-    </>
-  ),
   bell: (
     <>
       <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
@@ -153,7 +148,6 @@ function WorkspaceDashboard({
   statusLabel,
   modules,
   insights,
-  onSignOut,
 }) {
   const availableModules = modules.filter((module) => module.availability === 'Available')
   const navigationModules = availableModules.filter((module) => module.internal && module.href)
@@ -209,10 +203,6 @@ function WorkspaceDashboard({
               <small>{user.role_name}</small>
             </span>
           </div>
-          <button type="button" className="sidebar-signout" onClick={onSignOut}>
-            <DashboardIcon name="logout" />
-            <span>Sign out</span>
-          </button>
         </div>
       </aside>
 
@@ -228,10 +218,6 @@ function WorkspaceDashboard({
               <span className="session-chip__dot" />
               {sessionLabel}
             </span>
-            <button type="button" className="topbar-signout" onClick={onSignOut}>
-              <DashboardIcon name="logout" />
-              <span>Sign out</span>
-            </button>
           </div>
         </header>
 

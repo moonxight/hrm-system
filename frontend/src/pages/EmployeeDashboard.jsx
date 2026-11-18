@@ -185,18 +185,6 @@ function EmployeeDashboard() {
   const [insightsYear, setInsightsYear] = useState(currentYear)
   const [insightsState, setInsightsState] = useState({ loading: true, year: '', leave: null, attendance: null, payroll: null, error: '' })
 
-  const handleSignOut = async () => {
-    try {
-      await apiClient.post('/api/auth/logout.php')
-    } catch {
-      // Local credentials are still cleared when the backend is unreachable.
-    } finally {
-      localStorage.removeItem('hrms_user')
-      sessionStorage.removeItem('hrms_csrf_token')
-      navigate('/login', { replace: true })
-    }
-  }
-
   useEffect(() => {
     if (!user) {
       navigate('/login', { replace: true })
@@ -309,7 +297,6 @@ function EmployeeDashboard() {
         filterSummary={`Showing personal leave and processed payroll for ${insightsYear}; attendance remains the latest 100 records.`}
         onResetFilters={resetYearFilter}
       />}
-      onSignOut={handleSignOut}
     />
   )
 }

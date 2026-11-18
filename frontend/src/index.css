@@ -602,8 +602,6 @@
 
 .password-toggle:focus-visible,
 .login-submit:focus-visible,
-.sidebar-signout:focus-visible,
-.topbar-signout:focus-visible,
 .workspace-nav__item:focus-visible,
 .module-card:focus-visible {
   outline: 3px solid rgba(82, 105, 170, 0.25);
@@ -839,9 +837,7 @@
   background: #485f9f;
 }
 
-.workspace-nav__item svg,
-.sidebar-signout svg,
-.topbar-signout svg {
+.workspace-nav__item svg {
   width: 1.05rem;
   height: 1.05rem;
   flex: 0 0 auto;
@@ -893,32 +889,6 @@
   font-size: 0.64rem;
 }
 
-.sidebar-signout,
-.topbar-signout {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: 2.5rem;
-  border-radius: 0.7rem;
-  background: transparent;
-  color: #7b859a;
-  font-size: 0.72rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.sidebar-signout {
-  width: 100%;
-  margin-top: 0.5rem;
-}
-
-.sidebar-signout:hover,
-.topbar-signout:hover {
-  background: #fff2f5;
-  color: #a84f64;
-}
-
 .workspace-main {
   min-width: 0;
 }
@@ -960,10 +930,6 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.notification-menu {
-  position: relative;
 }
 
 .notification-button {
@@ -1114,13 +1080,6 @@
 
 .session-chip--ok .session-chip__dot {
   background: #6dac5b;
-}
-
-.topbar-signout {
-  display: none;
-  padding: 0 0.75rem;
-  border: 1px solid var(--nexa-border);
-  background: #ffffff;
 }
 
 .workspace-content {
@@ -1680,10 +1639,6 @@
     display: block;
   }
 
-  .topbar-signout {
-    display: flex;
-  }
-
   .workspace-hero {
     grid-template-columns: 1fr minmax(10rem, 0.45fr);
   }
@@ -1744,14 +1699,8 @@
     gap: 0.45rem;
   }
 
-  .topbar-signout span,
   .session-chip__dot {
     display: none;
-  }
-
-  .topbar-signout {
-    width: 2.35rem;
-    padding: 0;
   }
 
   .workspace-content {
