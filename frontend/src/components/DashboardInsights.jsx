@@ -15,6 +15,11 @@ import {
   YAxis,
 } from 'recharts'
 
+const compactNumber = new Intl.NumberFormat('en', { notation: 'compact' })
+const displayNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 2 })
+const chartTick = { fontSize: 13, fill: '#475569' }
+const chartLegend = { fontSize: 14 }
+
 const chartColors = ['#0284c7', '#059669', '#d97706', '#dc2626', '#64748b']
 
 function DashboardInsights({
@@ -41,10 +46,10 @@ function DashboardInsights({
         </div>
         {filters.length > 0 && (
           <div className="flex flex-col items-start gap-2">
-            <div className="flex flex-wrap gap-3">
+            <div className="flex w-full flex-wrap gap-3">
               {filters.map((filter) => (
                 <label key={filter.id} className="min-w-0 flex-1 basis-40">
-                  <span className="mb-1 block text-xs font-medium text-slate-600">{filter.label}</span>
+                  <span className="mb-2 block text-sm font-medium text-slate-700">{filter.label}</span>
                   {filter.type === 'select' ? (
                     <select className="field-input" value={filter.value} onChange={filter.onChange} disabled={loading}>
                       {filter.options.map((option) => (
@@ -67,7 +72,7 @@ function DashboardInsights({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {filterSummary && <p className="text-xs text-slate-500">{filterSummary}</p>}
+              {filterSummary && <p className="text-sm text-slate-600">{filterSummary}</p>}
               {onResetFilters && (
                 <button type="button" className="action-button-secondary" onClick={onResetFilters} disabled={loading}>
                   Reset filters
@@ -88,11 +93,11 @@ function DashboardInsights({
       )}
 
       {!loading && hasKpis && (
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {kpis.map((kpi) => {
             const card = <>
               <p className="text-sm font-medium text-slate-700">{kpi.label}</p>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{kpi.value ?? 'Unavailable'}</p>
+              <p className="mt-2 break-words text-3xl font-bold tracking-tight text-slate-900">{kpi.value ?? 'Unavailable'}</p>
               {kpi.detail && <p className="mt-1 text-sm leading-5 text-slate-600">{kpi.detail}</p>}
             </>
             return kpi.to
@@ -105,70 +110,91 @@ function DashboardInsights({
       )}
 
       {!loading && charts.length > 0 && (
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-5 xl:grid-cols-2">
           {charts.map((chart) => (
             <article key={chart.title} className="panel-surface min-w-0 p-4 sm:p-5">
               <div className="mb-3">
                 <h3 className="font-semibold text-slate-900">{chart.title}</h3>
-                {chart.description && <p className="mt-1 text-xs text-slate-500">{chart.description}</p>}
+                {chart.description && <p className="mt-1 text-sm text-slate-600">{chart.description}</p>}
               </div>
               {!Array.isArray(chart.data) || chart.data.length === 0 ? (
                 <p className="flex h-64 items-center justify-center rounded-lg bg-slate-50 px-4 text-center text-sm text-slate-500" role="status">
                   No records are available for this chart.
                 </p>
               ) : (
-                <ResponsiveContainer width="100%" height={260}>
-                  {chart.type === 'pie' ? (
-                    <PieChart>
-                      <Pie data={chart.data} dataKey="value" nameKey="name" cx="50%" cy="48%" outerRadius="65%">
-                        {chart.data.map((entry, index) => (
-                          <Cell key={`${entry.name}-${index}`} fill={chartColors[index % chartColors.length]} />
+                <>
+                  <ResponsiveContainer width="100%" height={280}>
+                    {chart.type === 'pie' ? (
+                      <PieChart>
+                        <Pie data={chart.data} dataKey="value" nameKey="name" cx="50%" cy="48%" outerRadius="65%">
+                          {chart.data.map((entry, index) => (
+                            <Cell key={`${entry.name}-${index}`} fill={chartColors[index % chartColors.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend wrapperStyle={chartLegend} />
+                      </PieChart>
+                    ) : chart.type === 'line' ? (
+                      <LineChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                        <XAxis dataKey={chart.xKey} minTickGap={18} tickMargin={9} interval="preserveStartEnd" tick={chartTick} />
+                        <YAxis tick={chartTick} width={68} />
+                        <Tooltip />
+                        <Legend wrapperStyle={chartLegend} />
+                        {chart.series.map((series, index) => (
+                          <Line
+                            key={series.key}
+                            type="monotone"
+                            dataKey={series.key}
+                            name={series.label}
+                            stroke={series.color || chartColors[index % chartColors.length]}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                            connectNulls
+                          />
                         ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  ) : chart.type === 'line' ? (
-                    <LineChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                      <XAxis dataKey={chart.xKey} minTickGap={20} tickMargin={7} tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} width={68} />
-                      <Tooltip />
-                      <Legend />
-                      {chart.series.map((series, index) => (
-                        <Line
-                          key={series.key}
-                          type="monotone"
-                          dataKey={series.key}
-                          name={series.label}
-                          stroke={series.color || chartColors[index % chartColors.length]}
-                          strokeWidth={2}
-                          dot={{ r: 3 }}
-                          connectNulls
-                        />
+                      </LineChart>
+                    ) : (
+                      <BarChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                        <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                        <XAxis dataKey={chart.xKey} minTickGap={18} tickMargin={9} interval="preserveStartEnd" tick={chartTick} />
+                        <YAxis allowDecimals={Boolean(chart.currency)} tick={chartTick} width={chart.currency ? 56 : 42}
+                          tickFormatter={chart.currency ? (value) => compactNumber.format(value) : undefined} />
+                        <Tooltip formatter={chart.currency ? (value) => `${chart.currency} ${Number(value).toLocaleString('en', { minimumFractionDigits: 2 })}` : undefined} />
+                        {chart.series.length > 1 && <Legend wrapperStyle={chartLegend} />}
+                        {chart.series.map((series, index) => (
+                          <Bar
+                            key={series.key}
+                            dataKey={series.key}
+                            name={series.label}
+                            stackId={chart.stacked ? 'total' : undefined}
+                            fill={series.color || chartColors[index % chartColors.length]}
+                            radius={chart.stacked ? 0 : [4, 4, 0, 0]}
+                          />
+                        ))}
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                  <details className="mt-3 rounded-lg border border-slate-200">
+                    <summary className="min-h-11 cursor-pointer px-3 py-3 text-sm font-semibold text-sky-800">View chart data</summary>
+                    <dl className="divide-y divide-slate-200 px-3 text-sm">
+                      {chart.data.map((row, index) => (
+                        <div key={index} className="py-2">
+                          <dt className="font-semibold text-slate-900">{chart.type === 'pie' ? row.name : row[chart.xKey]}</dt>
+                          <dd className="text-slate-600">
+                            {chart.type === 'pie'
+                              ? displayNumber.format(row.value)
+                              : chart.series.map(({ key, label }) => (
+                                <span key={key} className="mr-4 inline-block">
+                                  {label} {row[key] == null ? 'Unavailable' : [chart.currency, displayNumber.format(row[key])].filter(Boolean).join(' ')}
+                                </span>
+                              ))}
+                          </dd>
+                        </div>
                       ))}
-                    </LineChart>
-                  ) : (
-                    <BarChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
-                      <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                      <XAxis dataKey={chart.xKey} minTickGap={20} tickMargin={7} tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={Boolean(chart.currency)} tick={{ fontSize: 12 }} width={chart.currency ? 56 : 42}
-                        tickFormatter={chart.currency ? (value) => new Intl.NumberFormat('en', { notation: 'compact' }).format(value) : undefined} />
-                      <Tooltip formatter={chart.currency ? (value) => `${chart.currency} ${Number(value).toLocaleString('en', { minimumFractionDigits: 2 })}` : undefined} />
-                      {chart.series.length > 1 && <Legend />}
-                      {chart.series.map((series, index) => (
-                        <Bar
-                          key={series.key}
-                          dataKey={series.key}
-                          name={series.label}
-                          stackId={chart.stacked ? 'total' : undefined}
-                          fill={series.color || chartColors[index % chartColors.length]}
-                          radius={chart.stacked ? 0 : [4, 4, 0, 0]}
-                        />
-                      ))}
-                    </BarChart>
-                  )}
-                </ResponsiveContainer>
+                    </dl>
+                  </details>
+                </>
               )}
             </article>
           ))}

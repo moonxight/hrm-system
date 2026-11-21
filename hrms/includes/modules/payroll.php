@@ -1,14 +1,16 @@
 <?php
 $b=HRMS_METHOD==='POST' ? input() : $_GET;
+$isManager = ($_SESSION['role_name'] ?? '') === 'Manager';
 if ($action==='get') {
     requireLogin();
     $params=[];
     $where=scope('p.employee_id',$params);
-    if (($_SESSION['role_name'] ?? '') === 'Manager') {
-        $where = "({$where} OR p.employee_id=?)";
-        $params[] = ownEmployee();
+    if ($isManager) {
+        $where = "(({$where} AND p.employee_id<>?) OR (p.employee_id=? AND p.payroll_status='Processed'))";
+        $managerId = ownEmployee();
+        array_push($params, $managerId, $managerId);
     }
-    if (!isAdminOrHR()) {
+    if ((!isAdminOrHR() && !$isManager) || ($b['finalized_only'] ?? '') === '1') {
         $where .= " AND p.payroll_status='Processed'";
     }
     if (isset($b['payroll_id'])) {
@@ -42,13 +44,15 @@ if ($action==='get-items') {
     $id=id($b['payroll_id'] ?? null,'payroll_id');
     $payroll=record('payroll','payroll_id',$id);
     requireEmployeeAccess((int)$payroll['employee_id']);
-    if (!isAdminOrHR() && $payroll['payroll_status'] !== 'Processed') {
+    if ($payroll['payroll_status'] !== 'Processed' && !isAdminOrHR()
+        && (!$isManager || (int) $payroll['employee_id'] === ownEmployee())) {
         fail(404, 'This payslip is not available.');
     }
     $items=rows('SELECT * FROM payroll_items WHERE payroll_id=? ORDER BY payroll_item_id',[$id]);
     reply($items,'Payroll items retrieved successfully.',200,['payroll_id'=>$id,'items'=>$items,'total_items'=>count($items)]);
 }
-requireRole(['Admin','HR']);
+$draftActions = ['create', 'add-item', 'calculate'];
+requireRole(in_array($action, $draftActions, true) ? ['Admin', 'HR', 'Manager'] : ['Admin', 'HR']);
 if ($action==='position-bands') {
     $guidelines=rows(
         "SELECT g.salary_guideline_id,g.position_id,p.position_name,d.department_name,"
@@ -110,7 +114,8 @@ if ($action==='assign-component') {
 }
 if ($action==='create') {
     $employee=id($b['employee_id'] ?? null,'employee_id'); [$start,$end]=dates($b,'pay_period_start','pay_period_end');
-    $p=transaction(function() use($employee,$start,$end) {
+    $p=transaction(function() use($employee,$start,$end,$isManager) {
+        if ($isManager) requireManagedPayrollEmployee($employee);
         record('employees','employee_id',$employee,true);
         if (one('SELECT payroll_id FROM payroll WHERE employee_id=? AND pay_period_start<=? AND pay_period_end>=?',[$employee,$end,$start])) fail(409,'Payroll periods cannot overlap.');
         $salary=one("SELECT * FROM employee_salaries WHERE employee_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from DESC LIMIT 1",[$employee,$start,$end]);
@@ -158,8 +163,9 @@ if ($action === 'record-payment') {
     });
     reply(['payroll_id' => $id, 'payment_recorded_on' => $payment['paid_on']] + $payment, 'Payment recorded.');
 }
-$p=transaction(function() use($action,$id,$b) {
+$p=transaction(function() use($action,$id,$b,$isManager) {
     $p=record('payroll','payroll_id',$id,true);
+    if ($isManager) requireManagedPayrollEmployee((int) $p['employee_id']);
     if ($p['payroll_status']!=='Draft') fail(409,'Only Draft payroll can be changed or processed.');
     if ($action==='add-item') {
         $type=choice($b['item_type']??null,['Allowance','Deduction'],'item_type'); $name=textValue($b['item_name']??null,'item_name',100);
@@ -220,3 +226,9 @@ $p=transaction(function() use($action,$id,$b) {
     return $p;
 });
 reply($p,'Payroll operation completed successfully.',200,$p);
+
+function requireManagedPayrollEmployee(int $employeeId): void
+{
+    if ($employeeId === ownEmployee()) fail(403, 'Managers can prepare payroll for assigned employees only.');
+    requireEmployeeAccess($employeeId);
+}

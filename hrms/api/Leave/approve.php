@@ -4,20 +4,7 @@ define('HRMS_METHOD', 'POST');
 require_once __DIR__ . '/../../includes/bootstrap.php';
 
 
-$user_role = $_SESSION["role_name"] ?? "";
-
-if (!in_array($user_role, ["Admin", "HR", "Manager"], true)) {
-
-    http_response_code(403);
-
-    echo json_encode([
-        "success" => false,
-        "message" => "Access denied."
-    ]);
-
-    exit;
-}
-
+requireRole(['Admin', 'HR']);
 
 /*
  * Only POST requests are allowed.

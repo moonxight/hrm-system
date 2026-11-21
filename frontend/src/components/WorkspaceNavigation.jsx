@@ -40,12 +40,16 @@ function NotificationMenu({ user }) {
   const [items, setItems] = useState([])
   const [loadState, setLoadState] = useState('loading')
   const [readError, setReadError] = useState('')
+  const [readMessage, setReadMessage] = useState('')
   const [open, setOpen] = useState(false)
   const [revision, refreshNotifications] = useState(0)
   const container = useRef(null)
   const trigger = useRef(null)
   const location = useLocation()
-  const unread = items.filter((item) => !item.read_at).length
+  const unreadItems = items.filter((item) => !item.read_at)
+  const readItems = items.filter((item) => item.read_at)
+  const unread = unreadItems.length
+  const unreadHeading = useRef(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -78,9 +82,10 @@ function NotificationMenu({ user }) {
     }
   }, [open])
 
-  async function markRead(item) {
+  async function markRead(item, button) {
     if (item.read_at) return
     setReadError('')
+    setReadMessage('')
     try {
       const send = () => apiClient.post('/api/notifications/read.php', { notification_id: item.notification_id })
       const { data } = await send().catch(async (failure) => {
@@ -88,6 +93,8 @@ function NotificationMenu({ user }) {
         await refreshSession()
         return send()
       })
+      if (button && document.activeElement === button) unreadHeading.current?.focus()
+      if (button) setReadMessage('Notification marked as read.')
       setItems((previous) => previous.map((entry) => entry.notification_id === item.notification_id
         ? { ...entry, read_at: data.data.read_at }
         : entry))
@@ -102,6 +109,7 @@ function NotificationMenu({ user }) {
         aria-controls="workspace-notifications" aria-label={`Notifications, ${unread} unread`}
         onClick={() => {
           setReadError('')
+          setReadMessage('')
           if (!open) refreshNotifications((value) => value + 1)
           setOpen(!open)
         }}>
@@ -116,18 +124,32 @@ function NotificationMenu({ user }) {
         {loadState === 'error' && <p className="notification-empty" role="alert">Could not load notifications. Reopen this menu to retry.</p>}
         {readError && <p className="notification-empty" role="alert">{readError}</p>}
         {loadState === 'ready' && !items.length && <p className="notification-empty">You're all caught up.</p>}
-        {items.map((item) => {
-          const target = destination(item, user)
-          return <div key={item.notification_id} className={`notification-item${item.read_at ? '' : ' notification-item--unread'}`}>
-            <span>{item.title}</span>
-            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
-              {target && <Link className="font-semibold text-sky-800 underline underline-offset-2" to={target.path}
-                onClick={() => { void markRead(item); setOpen(false) }}>Open {target.label}</Link>}
-              {item.read_at ? <small>Read</small> : <button type="button" className="min-h-9 font-semibold text-sky-800"
-                onClick={() => markRead(item)}>Mark as read</button>}
-            </div>
-          </div>
-        })}
+        <p className="sr-only" role="status">{readMessage}</p>
+        {items.length > 0 && [
+          { title: 'Unread', entries: unreadItems, initiallyOpen: true },
+          { title: 'Read', entries: readItems, initiallyOpen: false },
+        ].map(({ title, entries, initiallyOpen }) => (
+          <details key={title} open={initiallyOpen}>
+            <summary ref={initiallyOpen ? unreadHeading : null} className="min-h-11 cursor-pointer border-b border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800">
+              {title} ({entries.length})
+            </summary>
+            {entries.length === 0 && <p className="notification-empty">No {title.toLowerCase()} notifications.</p>}
+            {entries.map((item) => {
+              const target = destination(item, user)
+              return (
+                <div key={item.notification_id} className={'notification-item' + (item.read_at ? '' : ' notification-item--unread')}>
+                  <span>{item.title}</span>
+                  <div className="flex flex-wrap items-center gap-4 text-sm">
+                    {target && <Link className="inline-flex min-h-11 items-center font-semibold text-sky-800 underline underline-offset-2" to={target.path}
+                      onClick={() => { void markRead(item); setOpen(false) }}>Open {target.label}</Link>}
+                    {!item.read_at && <button type="button" className="min-h-11 font-semibold text-sky-800"
+                      onClick={(event) => markRead(item, event.currentTarget)}>Mark as read</button>}
+                  </div>
+                </div>
+              )
+            })}
+          </details>
+        ))}
       </div>}
     </div>
   )
@@ -162,9 +184,9 @@ export default function WorkspaceNavigation() {
       <details ref={menu} className="relative" onKeyDown={(event) => { if (event.key === 'Escape') menu.current.open = false }}>
         <summary className="action-button-secondary cursor-pointer list-none">Menu <span aria-hidden="true">▾</span></summary>
         <div className="absolute left-0 top-full mt-2 grid max-h-[65vh] w-56 gap-1 overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-          {available.map(([path, label]) => <NavLink key={path} to={path} end={path !== '/dashboard'} onClick={() => { menu.current.open = false }} className={({ isActive }) => `rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-sky-50 font-semibold text-sky-900' : 'text-slate-700 hover:bg-slate-100'}`}>{label}</NavLink>)}
+          {available.map(([path, label]) => <NavLink key={path} to={path} end={path !== '/dashboard'} onClick={() => { menu.current.open = false }} className={({ isActive }) => `flex min-h-11 items-center rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-sky-50 font-semibold text-sky-900' : 'text-slate-700 hover:bg-slate-100'}`}>{label}</NavLink>)}
           {['calendar', 'help'].map((page) => <NavLink key={page} to={`/${page}`} onClick={() => { menu.current.open = false }}
-            className="rounded-lg px-3 py-2 text-sm capitalize sm:hidden">{page}</NavLink>)}
+            className="flex min-h-11 items-center rounded-lg px-3 py-2 text-sm capitalize sm:hidden">{page}</NavLink>)}
         </div>
       </details>
       <span className="mr-auto hidden text-sm font-semibold text-slate-700 sm:inline">{here}</span>

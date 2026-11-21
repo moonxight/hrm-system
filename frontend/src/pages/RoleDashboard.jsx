@@ -307,7 +307,7 @@ function managerInsights(data, selectedPeriod) {
     return params.size ? `${page}?${params}` : page
   }
   const attendanceFilters = { employee_id: selectedPeriod.employeeId, month: selectedPeriod.attendanceMonth }
-  const leaveFilters = { employee_id: selectedPeriod.employeeId, year: selectedPeriod.leaveYear, status: leaveStatus }
+  const leaveFilters = { team_only: '1', employee_id: selectedPeriod.employeeId, year: selectedPeriod.leaveYear, status: leaveStatus }
   const attendanceStatuses = [
     ['Present', 'present'],
     ['Absent', 'absent'],

@@ -10,16 +10,23 @@ The reference is [pbrong/hrms](https://github.com/pbrong/hrms). Its staff intake
 | ????? and ???? | Candidate management and employment start date | Admin or HR can turn an offer into an employee record and create a checklist using the employee's start date. |
 | ???? | Attendance reporting | Payroll stores an attendance snapshot at processing time. The snapshot records hours and leave for review. |
 | ???? and ???? | Departments and positions | A hire inherits the department and position from their vacancy. |
-| ???? | Role-based access | Admin and HR manage payroll and hiring. Managers see finalized payroll for themselves and their assigned team. Employees see their own finalized records. |
+| ???? | Role-based access | Admin and HR control salary, recurring components, payroll finalization and payments. Managers prepare drafts for assigned staff. Employees see their own finalized records. |
 
 ## Record a payroll payment
 
-1. Admin or HR creates a draft for an employee with a salary that covers the pay period. The draft uses recurring components in effect on the period's last day and can receive extra allowances and deductions.
-2. Admin or HR processes the draft. HRMS finalizes the totals and captures the attendance snapshot.
+1. Admin, HR or the employee's assigned manager opens Payroll and creates a draft. The employee needs a salary that covers the pay period. The draft uses recurring components in effect on the period's last day. The person preparing the draft can add one-off allowances and deductions and calculate the totals.
+2. Admin or HR selects the same record in Payroll history and processes it. HRMS recalculates the totals, captures the attendance snapshot and makes the finalized record available in Payslips.
 3. After payment is completed outside HRMS, Admin or HR records the payment date, method and receipt or transaction reference. HRMS uses the finalized net salary and currency, and logs who recorded it.
 4. The employee sees the recorded date on their payslip. The receipt reference is visible to Admin and HR. The system creates an in-app alert for the employee.
 
 `payroll_payments.payroll_id` is the primary key and points to the payroll record. One finalized payroll can have one full payment record. Retrying the same submission returns that record. A different submission for the same payroll returns a conflict. Some older records have a processing date in `payroll.payment_date`. Payment status now comes from the separate payment record.
+
+## Review a leave request
+
+1. An employee uses Request leave to enter a leave type and dates. The saved request opens with Pending status and HR/Admin receive a notification linked to it.
+2. HR or Admin opens the request from Notifications or filters the Leave list by name, employee ID or number, role or job title, status or year.
+3. The reviewer approves the request or enters a rejection reason and confirms rejection. The request opens with the saved decision. Approval updates the employee's balance. The employee receives a notification linked to the result.
+4. Managers view request details such as dates and status for their assigned employees. The team view hides private reasons and the decision controls.
 
 ## Hire an applicant and begin onboarding
 

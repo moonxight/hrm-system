@@ -582,6 +582,7 @@ try {
     $insert_stmt->execute();
 
     $leave_request_id = $insert_stmt->insert_id;
+    notifyHR('Leave request awaiting review', 'leave_requests', (int) $leave_request_id);
     $conn->commit();
 
 

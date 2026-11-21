@@ -273,7 +273,59 @@ function AttendancePage() {
           {isEmployee ? <p className="mt-4 rounded-xl border border-[#ffd1dc] bg-[#fff7f9] px-4 py-3 text-sm text-slate-700">Check-in confirms the account action, but location is currently marked <strong>Unverified</strong>. The system does not claim that the employee is physically at work.</p> : <p className="mt-4 text-sm text-slate-600">Managers see assigned employees only. Admin and HR can review organisation-wide attendance.</p>}
         </section>
 
-        <section className="panel-surface p-5 sm:p-6"><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">Attendance records</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{loading ? 'Loading' : `${records.length} records`}</span></div>{loading ? <p className="py-6 text-center text-sm text-slate-600">Loading attendance records...</p> : records.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">No attendance records found.</p> : <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Check in</th><th className="px-4 py-3">Check out</th><th className="px-4 py-3">Worked / expected</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Verification</th></tr></thead><tbody className="divide-y divide-slate-200">{records.map((record) => <tr key={record.attendance_id} className="bg-white"><td className="px-4 py-3 text-slate-700"><span className="font-medium text-slate-900">{record.employee_name || record.employee_id}</span>{!isManager && <span className="mt-1 block text-xs text-slate-500">{record.department_name || record.employee_number || ''}</span>}</td><td className="px-4 py-3 text-slate-700">{record.attendance_date}</td><td className="px-4 py-3 text-slate-700">{displayTime(record.check_in)}</td><td className="px-4 py-3 text-slate-700">{displayTime(record.check_out)}</td><td className="px-4 py-3 text-slate-700">{Number(record.hours_worked).toFixed(2)} / {Number(record.expected_hours).toFixed(2)}</td><td className="px-4 py-3 text-slate-700"><span className="font-medium">{record.status}</span>{record.late_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.late_minutes} min late</span>}{record.early_departure_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.early_departure_minutes} min early</span>}</td><td className="px-4 py-3 text-slate-700">{record.verification_status || 'Unverified'}</td></tr>)}</tbody></table></div>}</section>
+        <section className="panel-surface p-5 sm:p-6">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-slate-900">Attendance records</h2>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+              {loading ? 'Loading' : records.length + ' records'}
+            </span>
+          </div>
+          {loading ? (
+            <p className="py-6 text-center text-sm text-slate-600">Loading attendance records...</p>
+          ) : records.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">
+              No attendance records found.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="responsive-record-table min-w-full text-left text-sm" role="table">
+                <thead role="rowgroup" className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <tr role="row">
+                    {['Employee', 'Date', 'Check in', 'Check out', 'Worked / expected', 'Status', 'Verification'].map((label) => (
+                      <th key={label} role="columnheader" scope="col" className="px-4 py-3">{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody role="rowgroup" className="divide-y divide-slate-200">
+                  {records.map((record) => (
+                    <tr role="row" key={record.attendance_id} className="bg-white">
+                      <td role="cell" data-label="Employee" className="px-4 py-3 text-slate-700">
+                        <div>
+                          <span className="font-medium text-slate-900">{record.employee_name || record.employee_id}</span>
+                          {!isManager && <span className="mt-1 block text-xs text-slate-500">{record.department_name || record.employee_number || ''}</span>}
+                        </div>
+                      </td>
+                      <td role="cell" data-label="Date" className="px-4 py-3 text-slate-700">{record.attendance_date}</td>
+                      <td role="cell" data-label="Check in" className="px-4 py-3 text-slate-700">{displayTime(record.check_in)}</td>
+                      <td role="cell" data-label="Check out" className="px-4 py-3 text-slate-700">{displayTime(record.check_out)}</td>
+                      <td role="cell" data-label="Worked / expected" className="px-4 py-3 text-slate-700">
+                        {Number(record.hours_worked).toFixed(2)} / {Number(record.expected_hours).toFixed(2)}
+                      </td>
+                      <td role="cell" data-label="Status" className="px-4 py-3 text-slate-700">
+                        <div>
+                          <span className="font-medium">{record.status}</span>
+                          {record.late_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.late_minutes} min late</span>}
+                          {record.early_departure_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.early_departure_minutes} min early</span>}
+                        </div>
+                      </td>
+                      <td role="cell" data-label="Verification" className="px-4 py-3 text-slate-700">{record.verification_status || 'Unverified'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
     </main>
   )

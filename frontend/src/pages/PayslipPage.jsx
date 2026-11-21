@@ -32,7 +32,7 @@ function PayslipPage() {
       setError('')
 
       try {
-        const response = await apiClient.get('/api/payroll/get.php', { params: { payroll_id: /^[1-9]\d*$/.test(requestedPayroll) ? requestedPayroll : undefined } })
+        const response = await apiClient.get('/api/payroll/get.php', { params: { finalized_only: '1', payroll_id: /^[1-9]\d*$/.test(requestedPayroll) ? requestedPayroll : undefined } })
         const records = response.data.data || []
 
         if (!isActive) return

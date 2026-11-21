@@ -20,9 +20,15 @@ function LeavePage() {
   const employeeId = query.get('employee_id') || ''
   const status = query.get('status') || ''
   const year = query.get('year') || ''
+  const searchMode = query.get('search_by') || 'name'
+  const search = query.get('search') || ''
+  const teamOnly = query.get('team_only') || ''
   const user = readStoredUser()
   const isEmployee = user?.role_name === 'Employee'
-  const canReview = ['Admin', 'HR', 'Manager'].includes(user?.role_name)
+  const isManager = user?.role_name === 'Manager'
+  const canReview = ['Admin', 'HR'].includes(user?.role_name)
+  const canFilterEmployees = canReview || isManager
+  const showBalance = isEmployee || (canReview && Boolean(employeeId))
   const [leaveTypes, setLeaveTypes] = useState([])
   const [balances, setBalances] = useState([])
   const [requests, setRequests] = useState([])
@@ -42,6 +48,7 @@ function LeavePage() {
     setQuery((previous) => {
       const next = new URLSearchParams(previous)
       next.delete('request')
+      if (name === 'search_by') next.delete('search')
       if (value) next.set(name, value)
       else next.delete(name)
       return next
@@ -49,7 +56,7 @@ function LeavePage() {
   }
 
   useEffect(() => {
-    if (!canReview) return undefined
+    if (!canFilterEmployees) return undefined
     const controller = new AbortController()
     apiClient.get('/api/employees/get.php', { params: { limit: 200 }, signal: controller.signal })
       .then(({ data }) => setStaff(data.data || []))
@@ -57,7 +64,7 @@ function LeavePage() {
         if (!controller.signal.aborted) setStaffError(getErrorMessage(failure, 'Employee names could not be loaded.'))
       })
     return () => controller.abort()
-  }, [canReview])
+  }, [canFilterEmployees])
 
   const loadData = useCallback(async (signal) => {
     setLoading(true)
@@ -66,12 +73,21 @@ function LeavePage() {
     try {
       const requestParams = linkedRequest
         ? { leave_request_id: linkedRequest }
-        : { employee_id: canReview && employeeId ? employeeId : undefined, status: status || undefined, year: year || undefined }
+        : {
+            employee_id: canFilterEmployees && employeeId ? employeeId : undefined,
+            search_by: canFilterEmployees && search ? searchMode : undefined,
+            search: canFilterEmployees && search ? search : undefined,
+            team_only: teamOnly || undefined,
+            status: status || undefined,
+            year: year || undefined,
+          }
       const [typesResponse, requestsResponse, balancesResponse] = await Promise.all([
         isEmployee ? apiClient.get('/api/Leave/types.php', { signal }) : null,
         apiClient.get('/api/Leave/get.php', { params: requestParams, signal }),
-        isEmployee || employeeId
-          ? apiClient.get('/api/Leave/balance.php', { params: { employee_id: employeeId || undefined }, signal })
+        showBalance && (!year || (Number(year) >= 2000 && Number(year) <= 2100))
+          ? apiClient.get('/api/Leave/balance.php', {
+              params: { employee_id: employeeId || undefined, year: year || undefined }, signal,
+            }).catch(() => null)
           : null,
       ])
       if (signal.aborted) return
@@ -83,7 +99,7 @@ function LeavePage() {
     } finally {
       if (!signal.aborted) setLoading(false)
     }
-  }, [canReview, employeeId, status, year, isEmployee, linkedRequest])
+  }, [canFilterEmployees, employeeId, status, year, isEmployee, linkedRequest, search, searchMode, showBalance, teamOnly])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -175,7 +191,7 @@ function LeavePage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-600">HRMS</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Leave Management</h1>
-            <p className="mt-2 text-sm text-slate-600">Live leave balances, requests, and approvals.</p>
+            <p className="mt-2 text-sm text-slate-600">{isManager ? 'View team leave requests and their current status. HR and Admin handle decisions.' : 'Live leave balances, requests, and approvals.'}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link>
@@ -185,9 +201,26 @@ function LeavePage() {
         {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         {success && <div role="status" className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
 
-        {canReview && (
+        {canFilterEmployees && (
           <section className="panel-surface mb-6 p-5 sm:p-6" aria-label="Leave filters">
             <h2 className="mb-3 font-semibold">Filter requests</h2>
+            <form className="mb-4 grid items-end gap-3 sm:grid-cols-[1fr_2fr_auto]" onSubmit={(event) => {
+              event.preventDefault()
+              changeFilter('search', new FormData(event.currentTarget).get('search').trim())
+            }}>
+              <label className="text-sm font-medium">Search by
+                <select className="field-input mt-1" value={searchMode} onChange={(event) => changeFilter('search_by', event.target.value)}>
+                  <option value="name">Employee name</option>
+                  <option value="employee_id">Employee ID or number</option>
+                  <option value="role">Role or job title</option>
+                </select>
+              </label>
+              <label className="text-sm font-medium">Search requests
+                <input key={searchMode + search} name="search" type="search" className="field-input mt-1" maxLength={100}
+                  defaultValue={search} placeholder={{ name: 'e.g. Ruth Phiri', employee_id: 'Employee ID or number', role: 'e.g. Finance Officer' }[searchMode]} />
+              </label>
+              <button type="submit" className="action-button-secondary">Search</button>
+            </form>
             <div className="grid gap-4 sm:grid-cols-3">
               <label className="text-sm font-medium">Employee
                 <select className="field-input mt-1" value={employeeId} onChange={(event) => changeFilter('employee_id', event.target.value)}>
@@ -210,9 +243,9 @@ function LeavePage() {
           </section>
         )}
 
-        {(isEmployee || employeeId) && <section className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {showBalance && <section className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="panel-surface min-w-0 p-5 sm:p-6">
-            <h2 className="text-lg font-bold text-slate-900">Leave balance</h2>
+            <h2 className="text-lg font-bold text-slate-900">Leave balance{year ? ' for ' + year : ''}</h2>
             {loading ? <p className="mt-4 text-sm text-slate-600">Loading balances...</p> : balances.length === 0 ? <p className="mt-4 text-sm text-slate-600">No leave balances are available.</p> : (
               <div className="mt-4 space-y-3">
                 {balances.map((balance) => (
@@ -241,7 +274,7 @@ function LeavePage() {
         <section className="panel-surface p-5 sm:p-6">
           <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">Leave requests</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{loading ? 'Loading' : `${requests.length} records`}</span></div>
           {linkedRequest && <Link to={listQuery.size ? `/leave?${listQuery}` : '/leave'} className="action-button-secondary mb-4">Back to leave requests</Link>}
-          {selectedReview && <form className="mb-5 space-y-3 rounded-xl bg-slate-50 p-4" onSubmit={submitReview} aria-label="Review leave request">
+          {canReview && selectedReview && <form className="mb-5 space-y-3 rounded-xl bg-slate-50 p-4" onSubmit={submitReview} aria-label="Review leave request">
             <h3 className="font-semibold">{review.decision === 'reject' ? 'Reject' : 'Approve'} leave for {selectedReview.employee_name}</h3>
             <p className="text-sm text-slate-600">{selectedReview.leave_name}, {selectedReview.start_date} to {selectedReview.end_date}</p>
             {review.decision === 'reject' && <label className="block text-sm font-medium">Rejection reason
@@ -253,7 +286,45 @@ function LeavePage() {
             </div>
           </form>}
           {loading ? <p className="py-6 text-center text-sm text-slate-600">Loading leave requests...</p> : requests.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">{linkedRequest ? 'This leave request is unavailable.' : 'No leave requests found.'}</p> : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Leave</th><th className="px-4 py-3">Period</th><th className="px-4 py-3">Days</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Actions</th></tr></thead><tbody className="divide-y divide-slate-200">{requests.map((request) => <tr key={request.leave_request_id} className="bg-white"><td className="px-4 py-3 text-slate-700">{request.employee_name}</td><td className="px-4 py-3 font-medium text-slate-900">{request.leave_name}</td><td className="px-4 py-3 text-slate-700">{request.start_date} to {request.end_date}</td><td className="px-4 py-3 text-slate-700">{request.number_of_days}</td><td className="px-4 py-3 text-slate-700">{request.status}{request.rejection_reason && <p className="mt-1 text-xs text-slate-600">{request.rejection_reason}</p>}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-2">{isEmployee && request.status === 'Pending' && <button type="button" disabled={submitting} onClick={() => cancelRequest(request.leave_request_id)} className="action-button-secondary">Cancel</button>}{canReview && request.status === 'Pending' && <><button type="button" disabled={submitting} onClick={() => setReview({ id: request.leave_request_id, decision: 'approve', reason: '' })} className="action-button-primary">Approve</button><button type="button" disabled={submitting} onClick={() => setReview({ id: request.leave_request_id, decision: 'reject', reason: '' })} className="action-button-secondary">Reject</button></>}</div></td></tr>)}</tbody></table></div>
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="responsive-record-table min-w-full text-left text-sm" role="table">
+                <thead role="rowgroup" className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <tr role="row">
+                    {['Employee', 'Leave', 'Period', 'Days', 'Status', ...(canReview || isEmployee ? ['Actions'] : [])].map((label) => (
+                      <th key={label} role="columnheader" scope="col" className="px-4 py-3">{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody role="rowgroup" className="divide-y divide-slate-200">
+                  {requests.map((request) => (
+                    <tr role="row" key={request.leave_request_id} className="bg-white">
+                      <td role="cell" data-label="Employee" className="px-4 py-3 text-slate-700">
+                        <div>{request.employee_name}{request.employee_number && <small className="block text-slate-600">{request.employee_number}</small>}</div>
+                      </td>
+                      <td role="cell" data-label="Leave" className="px-4 py-3 font-medium text-slate-900">{request.leave_name}</td>
+                      <td role="cell" data-label="Period" className="px-4 py-3 text-slate-700">{request.start_date} to {request.end_date}</td>
+                      <td role="cell" data-label="Days" className="px-4 py-3 text-slate-700">{request.number_of_days}</td>
+                      <td role="cell" data-label="Status" className="px-4 py-3 text-slate-700">
+                        <div>{request.status}{request.rejection_reason && <p className="mt-1 text-sm text-slate-600">{request.rejection_reason}</p>}</div>
+                      </td>
+                      {(canReview || isEmployee) && <td role="cell" data-label="Actions" className="px-4 py-3">
+                        <div className="flex flex-wrap gap-2">
+                          {isEmployee && request.status === 'Pending' && (
+                            <button type="button" disabled={submitting} onClick={() => cancelRequest(request.leave_request_id)} className="action-button-secondary">Cancel</button>
+                          )}
+                          {canReview && request.status === 'Pending' && Number(request.employee_id) !== Number(user.employee_id) && (
+                            <>
+                              <button type="button" disabled={submitting} onClick={() => setReview({ id: request.leave_request_id, decision: 'approve', reason: '' })} className="action-button-primary">Approve</button>
+                              <button type="button" disabled={submitting} onClick={() => setReview({ id: request.leave_request_id, decision: 'reject', reason: '' })} className="action-button-secondary">Reject</button>
+                            </>
+                          )}
+                        </div>
+                      </td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
       </div>

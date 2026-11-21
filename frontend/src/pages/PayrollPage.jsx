@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../api/client'
+import { readStoredUser } from '../api/session'
 
 const initialPayrollForm = {
   employee_id: '',
@@ -20,13 +21,16 @@ function getErrorMessage(error, fallback) {
 }
 
 function formatAmount(amount) {
+  if (amount == null || amount === '') return 'Unavailable'
   const numericAmount = Number(amount)
   return Number.isFinite(numericAmount) ? numericAmount.toFixed(2) : 'Unavailable'
 }
 
 function PayrollPage() {
-  const currentRole = JSON.parse(localStorage.getItem('hrms_user') || 'null')?.role_name
-  const canManagePayroll = ['Admin', 'HR'].includes(currentRole)
+  const user = readStoredUser()
+  const isManager = user?.role_name === 'Manager'
+  const canManagePayroll = ['Admin', 'HR'].includes(user?.role_name)
+  const canPreparePayroll = canManagePayroll || isManager
   const [payrollForm, setPayrollForm] = useState(initialPayrollForm)
   const [itemForm, setItemForm] = useState(initialItemForm)
   const [payroll, setPayroll] = useState(null)
@@ -34,6 +38,8 @@ function PayrollPage() {
   const [payrollRecordsLoading, setPayrollRecordsLoading] = useState(true)
   const [payrollRecordsError, setPayrollRecordsError] = useState('')
   const [items, setItems] = useState([])
+  const [itemsStatus, setItemsStatus] = useState('idle')
+  const [itemsRevision, refreshItems] = useState(0)
   const [loadingAction, setLoadingAction] = useState('')
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -46,29 +52,41 @@ function PayrollPage() {
   const [componentForm, setComponentForm] = useState({ employee_id: '', payroll_component_id: '', component_value: '', effective_from: '' })
 
   useEffect(() => {
+    if (!canPreparePayroll) return undefined
+    const controller = new AbortController()
+    const { signal } = controller
+
+    apiClient.get('/api/employees/get.php', { params: { status: 'Active', limit: 200 }, signal })
+      .then(({ data }) => {
+        if (signal.aborted) return
+        setEmployees((data.data || []).filter((employee) => !isManager || Number(employee.employee_id) !== Number(user?.employee_id)))
+      })
+      .catch((failure) => {
+        if (!signal.aborted) setEmployeesError(getErrorMessage(failure, 'Active employees could not be loaded.'))
+      })
+
+    return () => controller.abort()
+  }, [canPreparePayroll, isManager, user?.employee_id])
+
+  useEffect(() => {
     if (!canManagePayroll) return undefined
-    let isActive = true
+    const controller = new AbortController()
+    const { signal } = controller
 
     Promise.all([
-      apiClient.get('/api/employees/get.php', { params: { status: 'Active', limit: 200 } }),
-      apiClient.get('/api/payroll/components.php'),
-      apiClient.get('/api/payroll/position-bands.php'),
-      apiClient.get('/api/payroll/salary-overview.php'),
-    ])
-      .then(([employeesResponse, componentsResponse, guidelinesResponse, overviewResponse]) => {
-        if (!isActive) return
-        setEmployees(employeesResponse.data.data || [])
-        setPayrollComponents(componentsResponse.data.data || [])
-        setSalaryGuidelines(guidelinesResponse.data.data || [])
-        setSalaryOverview(overviewResponse.data.data || [])
-      })
-      .catch((requestError) => {
-        if (isActive) setEmployeesError(getErrorMessage(requestError, 'Active employees could not be loaded.'))
-      })
+      apiClient.get('/api/payroll/components.php', { signal }),
+      apiClient.get('/api/payroll/position-bands.php', { signal }),
+      apiClient.get('/api/payroll/salary-overview.php', { signal }),
+    ]).then(([components, guidelines, overview]) => {
+      if (signal.aborted) return
+      setPayrollComponents(components.data.data || [])
+      setSalaryGuidelines(guidelines.data.data || [])
+      setSalaryOverview(overview.data.data || [])
+    }).catch((failure) => {
+      if (!signal.aborted) setError(getErrorMessage(failure, 'Payroll configuration could not be loaded.'))
+    })
 
-    return () => {
-      isActive = false
-    }
+    return () => controller.abort()
   }, [canManagePayroll])
 
   useEffect(() => {
@@ -86,6 +104,7 @@ function PayrollPage() {
 
         setPayrollRecords(records)
         setPayroll((currentPayroll) => currentPayroll || records[0] || null)
+        if (records.length > 0) setItemsStatus('loading')
       } catch (requestError) {
         if (!isActive) return
 
@@ -104,6 +123,23 @@ function PayrollPage() {
     }
   }, [])
 
+  const selectedPayrollId = payroll?.payroll_id
+  useEffect(() => {
+    if (!selectedPayrollId) return undefined
+    const controller = new AbortController()
+    apiClient.get('/api/payroll/get-items.php', {
+      params: { payroll_id: selectedPayrollId },
+      signal: controller.signal,
+    }).then(({ data }) => {
+      if (controller.signal.aborted) return
+      setItems(data.data || [])
+      setItemsStatus('ready')
+    }).catch(() => {
+      if (!controller.signal.aborted) setItemsStatus('error')
+    })
+    return () => controller.abort()
+  }, [selectedPayrollId, itemsRevision])
+
   const handlePayrollChange = (event) => {
     const { name, value } = event.target
     setPayrollForm((previous) => ({ ...previous, [name]: value }))
@@ -115,7 +151,7 @@ function PayrollPage() {
   }
 
   const updatePayrollRecord = (update) => {
-    setPayroll((previous) => ({ ...previous, ...update }))
+    setPayroll((previous) => previous?.payroll_id === update.payroll_id ? { ...previous, ...update } : previous)
     setPayrollRecords((records) => records.map((record) => (
       record.payroll_id === update.payroll_id ? { ...record, ...update } : record
     )))
@@ -170,9 +206,16 @@ function PayrollPage() {
       'create',
       async () => {
         const response = await apiClient.post('/api/payroll/create.php', payrollForm)
-        setPayroll(response.data)
-        setPayrollRecords((records) => [response.data, ...records])
+        const employee = employees.find((entry) => String(entry.employee_id) === payrollForm.employee_id)
+        const record = {
+          ...response.data.data,
+          employee_name: employee ? [employee.first_name, employee.last_name].join(' ') : '',
+        }
+        setPayroll(record)
+        setPayrollRecords((records) => [record, ...records])
+        setPayrollForm(initialPayrollForm)
         setItems([])
+        setItemsStatus('loading')
         setItemForm(initialItemForm)
       },
       'Draft payroll created successfully.',
@@ -189,27 +232,12 @@ function PayrollPage() {
         await apiClient.post('/api/payroll/add-item.php', {
           payroll_id: payroll.payroll_id,
           ...itemForm,
-          amount: Number(itemForm.amount),
         })
         setItemForm(initialItemForm)
-        await loadItems(payroll.payroll_id)
+        setItemsStatus('loading')
+        refreshItems((value) => value + 1)
       },
       'Payroll item added successfully.',
-    )
-  }
-
-  const loadItems = async (payrollId = payroll?.payroll_id) => {
-    if (!payrollId) return
-
-    await runAction(
-      'items',
-      async () => {
-        const response = await apiClient.get('/api/payroll/get-items.php', {
-          params: { payroll_id: payrollId },
-        })
-        setItems(response.data.items || [])
-      },
-      'Payroll items loaded successfully.',
     )
   }
 
@@ -239,6 +267,7 @@ function PayrollPage() {
           payroll_id: payroll.payroll_id,
         })
         updatePayrollRecord(response.data)
+        setItems(response.data.payroll_items || [])
       },
       'Payroll processed. Record the payment once it has been made.',
     )
@@ -263,16 +292,21 @@ function PayrollPage() {
 
   const isBusy = Boolean(loadingAction)
   const isProcessed = payroll?.payroll_status === 'Processed'
+  const canEditDraft = canPreparePayroll && payroll?.payroll_status === 'Draft'
   const processedPayrolls = payrollRecords.filter((record) => record.payroll_status === 'Processed').length
   const draftPayrolls = payrollRecords.filter((record) => record.payroll_status === 'Draft').length
   const latestNetSalary = payrollRecords[0]?.net_salary
 
   const handlePayrollSelect = (event) => {
+    if (isBusy) return
     const selectedPayroll = payrollRecords.find(
       (record) => String(record.payroll_id) === event.target.value,
     )
 
+    if (selectedPayroll?.payroll_id === selectedPayrollId) return
     setPayroll(selectedPayroll || null)
+    setItemsStatus(selectedPayroll ? 'loading' : 'idle')
+    setItemForm(initialItemForm)
     setItems([])
     setError('')
     setSuccessMessage('')
@@ -287,7 +321,7 @@ function PayrollPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-600">HRMS</p>
               <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Payroll</h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                {canManagePayroll ? 'Prepare payroll and record payments.' : 'Review payroll records you have access to.'}
+                {isManager ? 'Prepare and calculate drafts for assigned employees. HR and Admin finalize payroll and record payment.' : 'Prepare payroll and record payments.'}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -311,7 +345,7 @@ function PayrollPage() {
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard label="Total payroll records" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : payrollRecords.length} />
           <SummaryCard label="Processed payrolls" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : processedPayrolls} />
-          {canManagePayroll && <SummaryCard label="Draft payrolls" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : draftPayrolls} />}
+          {canPreparePayroll && <SummaryCard label="Draft payrolls" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : draftPayrolls} />}
           <SummaryCard label="Latest net salary" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : formatAmount(latestNetSalary)} />
         </section>
 
@@ -356,28 +390,32 @@ function PayrollPage() {
 
           {!payrollRecordsLoading && !payrollRecordsError && payrollRecords.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Payroll</th>
-                    <th className="px-4 py-3 font-semibold">Employee</th>
-                    <th className="px-4 py-3 font-semibold">Period</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    <th className="px-4 py-3 font-semibold">Net salary</th>
+              <table className="responsive-record-table min-w-full text-left text-sm" role="table">
+                <thead role="rowgroup" className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <tr role="row">
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Payroll</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Employee</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Period</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Status</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Net salary</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody role="rowgroup" className="divide-y divide-slate-200">
                   {payrollRecords.map((record) => (
-                    <tr
-                      key={record.payroll_id}
-                      className={`cursor-pointer ${record.payroll_id === payroll?.payroll_id ? 'bg-sky-50' : 'bg-white hover:bg-slate-50'}`}
-                      onClick={() => handlePayrollSelect({ target: { value: String(record.payroll_id) } })}
-                    >
-                      <td className="px-4 py-3 font-medium text-slate-900">#{record.payroll_id}</td>
-                      <td className="px-4 py-3 text-slate-700">{record.employee_name || `Employee ${record.employee_id}`}</td>
-                      <td className="px-4 py-3 text-slate-700">{record.pay_period_start} to {record.pay_period_end}</td>
-                      <td className="px-4 py-3 text-slate-700">{record.payment_recorded_on ? 'Paid' : record.payroll_status}</td>
-                      <td className="px-4 py-3 text-slate-700">{formatAmount(record.net_salary)}</td>
+                    <tr role="row" key={record.payroll_id} className={record.payroll_id === payroll?.payroll_id ? 'bg-sky-50' : 'bg-white'}>
+                      <td role="cell" data-label="Payroll" className="px-4 py-3 font-medium text-slate-900">
+                        <a href="#payroll-summary" aria-label={'View payroll ' + record.payroll_id}
+                          aria-disabled={isBusy || undefined}
+                          className="inline-flex min-h-11 items-center font-semibold text-sky-800 underline underline-offset-2"
+                          onClick={(event) => {
+                            if (isBusy) event.preventDefault()
+                            else handlePayrollSelect({ target: { value: String(record.payroll_id) } })
+                          }}>#{record.payroll_id}</a>
+                      </td>
+                      <td role="cell" data-label="Employee" className="px-4 py-3 text-slate-700">{record.employee_name || 'Employee ' + record.employee_id}</td>
+                      <td role="cell" data-label="Period" className="px-4 py-3 text-slate-700">{record.pay_period_start} to {record.pay_period_end}</td>
+                      <td role="cell" data-label="Status" className="px-4 py-3 text-slate-700">{record.payment_recorded_on ? 'Paid' : record.payroll_status}</td>
+                      <td role="cell" data-label="Net salary" className="px-4 py-3 text-slate-700">{formatAmount(record.net_salary)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -430,12 +468,12 @@ function PayrollPage() {
           </section>
         )}
 
-        <section className={`mb-6 grid gap-6 ${canManagePayroll ? 'lg:grid-cols-[1.1fr_0.9fr]' : ''}`}>
-          {canManagePayroll && <div className="panel-surface p-5 sm:p-6">
+        <section className={`mb-6 grid gap-6 ${canPreparePayroll ? 'lg:grid-cols-[1.1fr_0.9fr]' : ''}`}>
+          {canPreparePayroll && <div className="panel-surface p-5 sm:p-6">
             <div className="mb-5">
               <p className="section-label">Step 1</p>
               <h2 className="mt-2 text-lg font-bold text-slate-900">Create Draft Payroll</h2>
-              <p className="mt-1 text-sm text-slate-600">The backend looks up the employee&apos;s active salary.</p>
+              <p className="mt-1 text-sm text-slate-600">Choose an employee and pay period. The system uses the salary covering that period.</p>
             </div>
 
             <form onSubmit={createPayroll} className="grid gap-4 sm:grid-cols-2">
@@ -466,13 +504,13 @@ function PayrollPage() {
                 <span className="mb-2 block text-sm font-medium text-slate-700">Period end</span>
                 <input required name="pay_period_end" type="date" value={payrollForm.pay_period_end} onChange={handlePayrollChange} className="field-input" />
               </label>
-              <button type="submit" disabled={isBusy} className="action-button-primary sm:col-span-2">
+              <button type="submit" disabled={isBusy || employees.length === 0 || payrollRecordsLoading} className="action-button-primary sm:col-span-2">
                 {loadingAction === 'create' ? 'Creating draft...' : 'Create Draft Payroll'}
               </button>
             </form>
           </div>}
 
-          <div className="panel-surface p-5 sm:p-6">
+          <div id="payroll-summary" className="panel-surface p-5 sm:p-6">
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="section-label">Current record</p>
@@ -486,7 +524,7 @@ function PayrollPage() {
             {payroll ? (
               <dl className="grid gap-4 sm:grid-cols-2">
                 <SummaryValue label="Payroll ID" value={payroll.payroll_id} />
-                <SummaryValue label="Employee ID" value={payroll.employee_id} />
+                <SummaryValue label="Employee" value={payroll.employee_name || payroll.employee_id} />
                 <SummaryValue label="Basic salary" value={formatAmount(payroll.basic_salary)} />
                 <SummaryValue label="Allowances" value={formatAmount(payroll.total_allowances)} />
                 <SummaryValue label="Deductions" value={formatAmount(payroll.total_deductions)} />
@@ -498,7 +536,7 @@ function PayrollPage() {
               </dl>
             ) : (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                Create a Draft payroll to view the backend calculation summary.
+                Select a record from payroll history or create a draft.
               </div>
             )}
           </div>
@@ -507,16 +545,19 @@ function PayrollPage() {
         <section className="panel-surface mb-6 p-5 sm:p-6">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              {canManagePayroll && <p className="section-label">Step 2</p>}
+              {canEditDraft && <p className="section-label">Step 2</p>}
               <h2 className="mt-2 text-lg font-bold text-slate-900">Payroll Items</h2>
-              {canManagePayroll && <p className="mt-1 text-sm text-slate-600">Add allowances or deductions to the selected draft payroll.</p>}
+              {canEditDraft && <p className="mt-1 text-sm text-slate-600">Add allowances or deductions to the selected draft payroll.</p>}
             </div>
-            <button type="button" disabled={!payroll || isBusy} onClick={() => loadItems()} className="action-button-secondary">
-              {loadingAction === 'items' ? 'Loading items...' : 'Load Items'}
-            </button>
+            {itemsStatus === 'error' && (
+              <button type="button" className="action-button-secondary" onClick={() => {
+                setItemsStatus('loading')
+                refreshItems((value) => value + 1)
+              }}>Retry loading items</button>
+            )}
           </div>
 
-          {canManagePayroll && <form onSubmit={addItem} className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr_0.8fr_1.5fr_auto] lg:items-end">
+          {canEditDraft && <form onSubmit={addItem} className="grid gap-4 lg:grid-cols-[0.8fr_1.2fr_0.8fr_1.5fr_auto] lg:items-end">
             <label>
               <span className="mb-2 block text-sm font-medium text-slate-700">Type</span>
               <select name="item_type" value={itemForm.item_type} onChange={handleItemChange} disabled={!payroll || isProcessed || isBusy} className="field-input">
@@ -541,32 +582,38 @@ function PayrollPage() {
             </button>
           </form>}
 
-          <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Type</th>
-                  <th className="px-4 py-3 font-semibold">Name</th>
-                  <th className="px-4 py-3 font-semibold">Amount</th>
-                  <th className="px-4 py-3 font-semibold">Description</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {items.length > 0 ? items.map((item, index) => (
-                  <tr key={item.payroll_item_id || `${item.item_name}-${index}`} className="bg-white">
-                    <td className="px-4 py-3 text-slate-700">{item.item_type}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{item.item_name}</td>
-                    <td className="px-4 py-3 text-slate-700">{formatAmount(item.amount)}</td>
-                    <td className="px-4 py-3 text-slate-600">{item.description || 'None'}</td>
-                  </tr>
-                )) : (
+          {itemsStatus === 'loading' ? (
+            <p role="status" className="mt-4 text-sm text-slate-600">Loading payroll items.</p>
+          ) : itemsStatus === 'error' ? (
+            <p role="alert" className="mt-4 text-sm text-red-700">Payroll items could not be loaded.</p>
+          ) : (
+            <div className="mt-6 overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
                   <tr>
-                    <td colSpan="4" className="px-4 py-6 text-center text-slate-500">No payroll items loaded.</td>
+                    <th className="px-4 py-3 font-semibold">Type</th>
+                    <th className="px-4 py-3 font-semibold">Name</th>
+                    <th className="px-4 py-3 font-semibold">Amount</th>
+                    <th className="px-4 py-3 font-semibold">Description</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {items.length > 0 ? items.map((item, index) => (
+                    <tr key={item.payroll_item_id || `${item.item_name}-${index}`} className="bg-white">
+                      <td className="px-4 py-3 text-slate-700">{item.item_type}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{item.item_name}</td>
+                      <td className="px-4 py-3 text-slate-700">{formatAmount(item.amount)}</td>
+                      <td className="px-4 py-3 text-slate-600">{item.description || 'None'}</td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan="4" className="px-4 py-6 text-center text-slate-500">{payroll ? 'No items for this payroll.' : 'Select a payroll record to see its items.'}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         {payroll && payroll.payroll_status === 'Processed' && (
@@ -585,19 +632,21 @@ function PayrollPage() {
           </section>
         )}
 
-        {canManagePayroll && <section className="panel-surface p-5 sm:p-6">
+        {canEditDraft && <section className="panel-surface p-5 sm:p-6">
           <div className="mb-5">
-            <p className="section-label">Steps 3 and 4</p>
-            <h2 className="mt-2 text-lg font-bold text-slate-900">Calculate and Process</h2>
-            <p className="mt-1 text-sm text-slate-600">Calculation updates the totals. Processing changes a Draft to Processed.</p>
+            <p className="section-label">{canManagePayroll ? 'Steps 3 and 4' : 'Step 3'}</p>
+            <h2 className="mt-2 text-lg font-bold text-slate-900">{canManagePayroll ? 'Calculate and process' : 'Calculate draft totals'}</h2>
+            <p className="mt-1 text-sm text-slate-600">{canManagePayroll
+              ? 'Calculate totals to review the draft before processing.'
+              : 'Calculate and save the totals. HR and Admin can open this same draft in Payroll history to finalize it.'}</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <button type="button" disabled={!payroll || isProcessed || isBusy} onClick={calculatePayroll} className="action-button-primary">
               {loadingAction === 'calculate' ? 'Calculating...' : 'Calculate Payroll'}
             </button>
-            <button type="button" disabled={!payroll || isProcessed || isBusy} onClick={processPayroll} className="action-button-secondary">
+            {canManagePayroll && <button type="button" disabled={isBusy} onClick={processPayroll} className="action-button-secondary">
               {loadingAction === 'process' ? 'Processing...' : 'Process Payroll'}
-            </button>
+            </button>}
           </div>
         </section>}
 

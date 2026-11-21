@@ -221,11 +221,9 @@ try {
             lr.start_date,
             lr.end_date,
             lr.number_of_days,
-            lr.reason,
             lr.status,
             lr.approved_by,
             lr.approved_at,
-            lr.rejection_reason,
             lr.created_at,
             lr.updated_at,
 
@@ -465,10 +463,7 @@ try {
                     $request["end_date"],
 
                 "number_of_days" =>
-                    (float)$request["number_of_days"],
-
-                "reason" =>
-                    $request["reason"]
+                    (float)$request["number_of_days"]
             ],
 
             "status" =>
@@ -482,10 +477,7 @@ try {
                         : null,
 
                 "reviewed_at" =>
-                    $request["approved_at"],
-
-                "rejection_reason" =>
-                    $request["rejection_reason"]
+                    $request["approved_at"]
             ],
 
             "created_at" =>

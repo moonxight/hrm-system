@@ -6,6 +6,7 @@ export default function HelpPage() {
   const user = readStoredUser()
   const { hash } = useLocation()
   const reviewer = ['Admin', 'HR'].includes(user?.role_name)
+  const manager = user?.role_name === 'Manager'
 
   useEffect(() => {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' })
@@ -29,12 +30,25 @@ export default function HelpPage() {
       <section id="calendar" className="panel-surface scroll-mt-24 p-5 sm:p-7">
         <h2 className="text-xl font-bold">Find a date or follow a notification</h2>
         <p className="mt-3 text-sm text-slate-700">Use the month arrows and the event type filter in Calendar. Select a day to see the records you can access and open the one you need. Pending leave is labelled separately from approved leave.</p>
-        <p className="mt-2 text-sm text-slate-700">Use Notifications at the top of the workspace. A notification with an Open label jumps directly to its record and marks the notification as read.</p>
+        <p className="mt-2 text-sm text-slate-700">Open Notifications at the top of the workspace and expand Unread or Read. An Open link takes you to the matching record and marks the notification as read.</p>
         <Link to="/calendar" className="action-button-primary mt-4">Open calendar</Link>
       </section>
       <section className="panel-surface p-5 sm:p-7">
         <h2 className="text-xl font-bold">Everyday tasks</h2>
-        <ul className="mt-3 space-y-3 text-sm text-slate-700"><li><strong>Attendance.</strong> Check in at the start of your shift. Check out once your check-in is recorded.</li>{!isLockedByOnboarding(user, '/leave') && <li><strong>Leave.</strong> Enter your dates in Leave. Check the request’s status there or in Calendar while it is pending or approved.</li>}</ul>
+        <ul className="mt-3 space-y-3 text-sm text-slate-700">
+          <li><strong>Attendance.</strong> Check in at the start of your shift. Check out once your check-in is recorded.</li>
+          {manager && <>
+            <li><strong>Team leave.</strong> Filter by employee or status in Leave. HR and Admin decide requests.</li>
+            <li><strong>Payroll drafts.</strong> In Payroll, choose an assigned employee and pay period. Create the draft, add any one-off items and calculate totals. Give HR the payroll ID to finalize it.</li>
+          </>}
+          {reviewer && <>
+            <li><strong>Leave reviews.</strong> Open a pending request from Leave or Notifications. Approve it, or enter a reason and confirm rejection.</li>
+            <li><strong>Finalize payroll.</strong> Open the draft in Payroll history, review the totals and select Process Payroll. Record the payment once it has been made.</li>
+          </>}
+          {user?.role_name === 'Employee' && !isLockedByOnboarding(user, '/leave') && (
+            <li><strong>Request leave.</strong> Choose the leave type and dates. Check Leave or Notifications for the outcome.</li>
+          )}
+        </ul>
         <div className="mt-4 flex flex-wrap gap-2"><Link to="/attendance" className="action-button-secondary">Open attendance</Link>{!isLockedByOnboarding(user, '/leave') && <Link to="/leave" className="action-button-secondary">Open leave</Link>}<Link to="/terms" className="action-button-secondary">Terms of use</Link></div>
       </section>
     </div>

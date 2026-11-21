@@ -45,6 +45,8 @@ function EmployeeDirectory() {
   const isManager = currentRole === 'Manager'
   const canManageEmployees = ['Admin', 'HR'].includes(currentRole)
   const [employees, setEmployees] = useState([])
+  const [teamDepartments, setTeamDepartments] = useState([])
+  const [teamDepartmentStatus, setTeamDepartmentStatus] = useState('loading')
   const [search, setSearch] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
   const employmentStatus = searchParams.get('status') || ''
@@ -87,6 +89,24 @@ function EmployeeDirectory() {
   }, [canManageEmployees, refreshKey, requestedOffer])
 
   useEffect(() => {
+    if (!isManager) return undefined
+    const controller = new AbortController()
+    apiClient.get('/api/manager/team.php', { signal: controller.signal }).then(({ data }) => {
+      if (controller.signal.aborted) return
+      const departments = new Map()
+      for (const { department } of data.data.employees) {
+        if (department?.department_id && department.department_name) departments.set(department.department_id, department)
+      }
+      setTeamDepartments([...departments.values()].sort((a, b) => a.department_name.localeCompare(b.department_name)))
+      setTeamDepartmentStatus('ready')
+    }).catch(() => {
+      if (!controller.signal.aborted) setTeamDepartmentStatus('error')
+    })
+    return () => controller.abort()
+  }, [isManager])
+
+  useEffect(() => {
+    if (!canManageEmployees) return undefined
     let isActive = true
     apiClient.get('/api/configuration/get.php')
       .then((response) => {
@@ -98,7 +118,7 @@ function EmployeeDirectory() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [canManageEmployees])
 
   useEffect(() => {
     let isActive = true
@@ -264,6 +284,10 @@ function EmployeeDirectory() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-600">HRMS</p>
               <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Employee Directory</h1>
+              {isManager && <p className="mt-2 text-sm text-slate-700">
+                <strong>{teamDepartments.length > 1 ? 'Team departments' : 'Team department'}</strong>
+                {' '}{teamDepartmentStatus === 'loading' ? 'Loading' : teamDepartmentStatus === 'error' ? 'Unavailable' : teamDepartments.map((department) => department.department_name).join(', ') || 'None assigned'}
+              </p>}
             </div>
 
             <Link to="/dashboard" className="action-button-secondary">
@@ -417,7 +441,7 @@ function EmployeeDirectory() {
                   {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
-              <label className="text-sm font-medium">Department<select className="field-input mt-1" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}><option value="">All departments</option>{configuration.departments.map((entry) => <option key={entry.department_id} value={entry.department_id}>{entry.department_name}</option>)}</select></label>
+              {(!isManager || teamDepartments.length > 1) && <label className="text-sm font-medium">Department<select className="field-input mt-1" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}><option value="">All departments</option>{(isManager ? teamDepartments : configuration.departments).map((entry) => <option key={entry.department_id} value={entry.department_id}>{entry.department_name}</option>)}</select></label>}
               <label className="text-sm font-medium">Hired on or after<input className="field-input mt-1" type="date" value={hiredFrom} onChange={(event) => setHiredFrom(event.target.value)} /></label>
             </fieldset>
           </div>
@@ -449,31 +473,31 @@ function EmployeeDirectory() {
 
           {!loading && !error && employees.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="employee-roster min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">ID</th>
-                    <th className="px-4 py-3 font-semibold">Employee number</th>
-                    <th className="px-4 py-3 font-semibold">Name</th>
-                    {!isManager && <th className="px-4 py-3 font-semibold">Department</th>}
-                    <th className="px-4 py-3 font-semibold">Position</th>
-                    <th className="px-4 py-3 font-semibold">Employment type</th>
-                    <th className="px-4 py-3 font-semibold">Status</th>
-                    {canManageEmployees && <th className="px-4 py-3 font-semibold">Actions</th>}
+              <table className="responsive-record-table min-w-full text-left text-sm" role="table">
+                <thead role="rowgroup" className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
+                  <tr role="row">
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">ID</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Employee number</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Name</th>
+                    {!isManager && <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Department</th>}
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Position</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Employment type</th>
+                    <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Status</th>
+                    {canManageEmployees && <th role="columnheader" scope="col" className="px-4 py-3 font-semibold">Actions</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody role="rowgroup" className="divide-y divide-slate-200">
                   {employees.map((employee) => (
-                    <tr key={employee.employee_id} className="bg-white">
-                      <td data-label="ID" className="px-4 py-3 text-slate-700">{employee.employee_id}</td>
-                      <td data-label="Employee number" className="px-4 py-3 text-slate-700">{employee.employee_number}</td>
-                      <td data-label="Name" className="px-4 py-3 font-medium text-slate-900">{employee.first_name} {employee.last_name}</td>
-                      {!isManager && <td data-label="Department" className="px-4 py-3 text-slate-700">{employee.department_name || 'Unassigned'}</td>}
-                      <td data-label="Position" className="px-4 py-3 text-slate-700">{employee.position_name || 'Unassigned'}</td>
-                      <td data-label="Employment type" className="px-4 py-3 text-slate-700">{employee.employment_type}</td>
-                      <td data-label="Status" className="px-4 py-3 text-slate-700">{employee.employment_status}</td>
+                    <tr role="row" key={employee.employee_id} className="bg-white">
+                      <td role="cell" data-label="ID" className="px-4 py-3 text-slate-700">{employee.employee_id}</td>
+                      <td role="cell" data-label="Employee number" className="px-4 py-3 text-slate-700">{employee.employee_number}</td>
+                      <td role="cell" data-label="Name" className="px-4 py-3 font-medium text-slate-900">{employee.first_name} {employee.last_name}</td>
+                      {!isManager && <td role="cell" data-label="Department" className="px-4 py-3 text-slate-700">{employee.department_name || 'Unassigned'}</td>}
+                      <td role="cell" data-label="Position" className="px-4 py-3 text-slate-700">{employee.position_name || 'Unassigned'}</td>
+                      <td role="cell" data-label="Employment type" className="px-4 py-3 text-slate-700">{employee.employment_type}</td>
+                      <td role="cell" data-label="Status" className="px-4 py-3 text-slate-700">{employee.employment_status}</td>
                       {canManageEmployees && (
-                        <td data-label="Actions" className="px-4 py-3">
+                        <td role="cell" data-label="Actions" className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             <button type="button" disabled={saving} onClick={() => beginEdit(employee)} className="action-button-secondary">Edit</button>
                             <button type="button" disabled={saving} onClick={() => changeEmployeeStatus(employee, employee.employment_status === 'Active' ? 'Inactive' : 'Active')} className="action-button-secondary">{employee.employment_status === 'Active' ? 'Deactivate' : 'Reactivate'}</button>

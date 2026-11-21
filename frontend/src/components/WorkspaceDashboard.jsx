@@ -101,45 +101,6 @@ export function DashboardIcon({ name, className = '' }) {
   )
 }
 
-function WorkspaceLink({ module, className = '' }) {
-  const content = (
-    <>
-      <span className="module-card__icon">
-        <DashboardIcon name={module.icon} />
-      </span>
-      <span className="module-card__copy">
-        {module.availability !== 'Available' && (<span className="availability-pill availability-pill--planned">Planned</span>)}
-        <strong>{module.title}</strong>
-        <small>{module.description}</small>
-      </span>
-      <span className="module-card__arrow">
-        <DashboardIcon name="arrow" />
-      </span>
-    </>
-  )
-
-  if (module.internal && isLockedByOnboarding(readStoredUser(), module.href)) {
-    return (
-      <div className={`module-card module-card--locked ${className}`.trim()} aria-disabled="true" title="Available after HR completes your onboarding">
-        {content}
-        <span className="availability-pill availability-pill--planned">Unlocks after onboarding</span>
-      </div>
-    )
-  }
-
-  const linkClass = `module-card${module.href ? ' module-card--link' : ''} ${className}`.trim()
-
-  if (module.internal && module.href) {
-    return <Link to={module.href} className={linkClass}>{content}</Link>
-  }
-
-  if (module.href) {
-    return <a href={module.href} target="_blank" rel="noreferrer" className={linkClass}>{content}</a>
-  }
-
-  return <div className={linkClass}>{content}</div>
-}
-
 function WorkspaceDashboard({
   user,
   sessionStatus,
@@ -228,42 +189,25 @@ function WorkspaceDashboard({
 
           {insights && <div className="mb-6">{insights}</div>}
 
-          <div className={isManager ? '' : 'workspace-grid'}>
-            {!isManager && <section className="workspace-panel workspace-panel--modules">
-              <div className="panel-heading">
-                <div>
-                  <span className="panel-heading__eyebrow">Your tools</span>
-                  <h2>Workspace shortcuts</h2>
-                </div>
-                <span className="panel-heading__count">{modules.length} modules</span>
+          <section className="workspace-panel account-panel">
+            <div className="panel-heading panel-heading--compact">
+              <div>
+                <span className="panel-heading__eyebrow">Account</span>
+                <h2>Access details</h2>
               </div>
-              <div className="module-grid">
-                {modules.map((module) => <WorkspaceLink key={module.title} module={module} />)}
-              </div>
-            </section>}
-
-            <aside className="workspace-rail">
-              <section className="workspace-panel account-panel">
-                <div className="panel-heading panel-heading--compact">
-                  <div>
-                    <span className="panel-heading__eyebrow">Account</span>
-                    <h2>Access details</h2>
-                  </div>
-                </div>
-                <dl className="account-list">
-                  <div><dt>Username</dt><dd>{user.username || 'Unavailable'}</dd></div>
-                  <div><dt>Email</dt><dd>{user.email || 'Unavailable'}</dd></div>
-                  <div><dt>Role</dt><dd>{user.role_name || 'Unavailable'}</dd></div>
-                  <div><dt>User ID</dt><dd>{user.user_id || 'Unavailable'}</dd></div>
-                  {isManager && <div><dt>Team departments</dt><dd>{departments.join(', ') || 'None listed'}</dd></div>}
-                </dl>
-                <div className={`access-note${sessionStatus.ok ? ' access-note--ok' : ''}`} aria-live="polite">
-                  <DashboardIcon name={sessionStatus.ok ? 'check' : 'lock'} />
-                  <span>{sessionStatus.loading ? 'Checking the current secure session…' : (sessionStatus.message || 'Session response unavailable.')}</span>
-                </div>
-              </section>
-            </aside>
-          </div>
+            </div>
+            <dl className="account-list">
+              <div><dt>Username</dt><dd>{user.username || 'Unavailable'}</dd></div>
+              <div><dt>Email</dt><dd>{user.email || 'Unavailable'}</dd></div>
+              <div><dt>Role</dt><dd>{user.role_name || 'Unavailable'}</dd></div>
+              <div><dt>User ID</dt><dd>{user.user_id || 'Unavailable'}</dd></div>
+              {isManager && <div><dt>Team departments</dt><dd>{departments.join(', ') || 'None listed'}</dd></div>}
+            </dl>
+            <div className={`access-note${sessionStatus.ok ? ' access-note--ok' : ''}`} aria-live="polite">
+              <DashboardIcon name={sessionStatus.ok ? 'check' : 'lock'} />
+              <span>{sessionStatus.loading ? 'Checking the current secure session…' : (sessionStatus.message || 'Session response unavailable.')}</span>
+            </div>
+          </section>
         </div>
       </section>
     </main>

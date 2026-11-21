@@ -3,19 +3,19 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-r
 import { isLockedByOnboarding, readStoredUser, refreshSession } from '../api/session'
 import WorkspaceNavigation from '../components/WorkspaceNavigation'
 import ChangePasswordPage from '../pages/ChangePasswordPage'
-import EmployeeDashboard from '../pages/EmployeeDashboard'
-import EmployeeDirectory from '../pages/EmployeeDirectory'
-import DocumentsPage from '../pages/DocumentsPage'
-import BenefitsPage from '../pages/BenefitsPage'
-import OnboardingPage from '../pages/OnboardingPage'
-import ProgressTrackerPage from '../pages/ProgressTrackerPage'
-import AttendancePage from '../pages/AttendancePage'
-import LeavePage from '../pages/LeavePage'
 import LoginPage from '../pages/LoginPage'
-import PayrollPage from '../pages/PayrollPage'
-import PayslipPage from '../pages/PayslipPage'
 import TermsPage from '../pages/TermsPage'
 
+const EmployeeDashboard = lazy(() => import('../pages/EmployeeDashboard'))
+const EmployeeDirectory = lazy(() => import('../pages/EmployeeDirectory'))
+const DocumentsPage = lazy(() => import('../pages/DocumentsPage'))
+const BenefitsPage = lazy(() => import('../pages/BenefitsPage'))
+const OnboardingPage = lazy(() => import('../pages/OnboardingPage'))
+const ProgressTrackerPage = lazy(() => import('../pages/ProgressTrackerPage'))
+const AttendancePage = lazy(() => import('../pages/AttendancePage'))
+const LeavePage = lazy(() => import('../pages/LeavePage'))
+const PayrollPage = lazy(() => import('../pages/PayrollPage'))
+const PayslipPage = lazy(() => import('../pages/PayslipPage'))
 const ReportsPage = lazy(() => import('../pages/ReportsPage'))
 const RoleDashboard = lazy(() => import('../pages/RoleDashboard'))
 const RecruitmentPage = lazy(() => import('../pages/RecruitmentPage'))
@@ -171,7 +171,7 @@ function AppRouter() {
       <Route path="/progress-tracker" element={<ProtectedRoute><ProgressTrackerPage /></ProtectedRoute>} />
       <Route path="/leave" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager', 'Employee']}><LeavePage /></RoleProtectedRoute></ProtectedRoute>} />
       <Route path="/attendance" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager', 'Employee']}><AttendancePage /></RoleProtectedRoute></ProtectedRoute>} />
-      <Route path="/payroll" element={<ProtectedRoute><PayrollPage /></ProtectedRoute>} />
+      <Route path="/payroll" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager']}><PayrollPage /></RoleProtectedRoute></ProtectedRoute>} />
       <Route path="/payslip" element={<ProtectedRoute><PayslipPage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR']}><ReportsPage /></RoleProtectedRoute></ProtectedRoute>} />
       <Route path="/recruitment" element={<ProtectedRoute><RoleProtectedRoute allowedRoles={['Admin', 'HR', 'Manager']}><RecruitmentPage /></RoleProtectedRoute></ProtectedRoute>} />
