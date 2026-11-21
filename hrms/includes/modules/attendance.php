@@ -117,9 +117,21 @@ if ($action === 'get') {
         $where .= ' AND a.attendance_date=?';
         $params[] = dateValue($body['date'], 'date');
     }
+    if (!empty($body['month'])) {
+        if (!empty($body['date'])) fail(400, 'Use either date or month.');
+        $month = dateValue($body['month'] . '-01', 'month');
+        $where .= ' AND a.attendance_date>=? AND a.attendance_date<?';
+        array_push($params, $month, (new DateTimeImmutable($month))->modify('+1 month')->format('Y-m-d'));
+    }
     if (isset($body['status']) && $body['status'] !== '') {
-        $where .= ' AND a.status=?';
-        $params[] = choice($body['status'], attendanceStatusValues(), 'status');
+        $status = $body['status'];
+        $group = match ($status) {
+            'half_days' => ['Half-Day', 'Half Day', 'Present (Half Day)', 'Late (Half Day)'],
+            'present_days' => ['Present', 'Present (Half Day)'],
+            default => [choice($status, attendanceStatusValues(), 'status')],
+        };
+        $where .= ' AND a.status IN (' . implode(',', array_fill(0, count($group), '?')) . ')';
+        array_push($params, ...$group);
     }
 
     $records = rows(

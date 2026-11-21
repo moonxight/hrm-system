@@ -4,8 +4,13 @@ if ($section==='notifications') {
     if ($action==='get') reply(rows("SELECT n.notification_id,n.title,n.entity,n.entity_id,n.read_at,n.created_at,i.application_id
         FROM notifications n LEFT JOIN interviews i ON n.entity='interviews' AND n.entity_id=i.interview_id
         WHERE n.user_id=? ORDER BY n.notification_id DESC".pageLimit(),[(int)$_SESSION['user_id']]));
-    $id=id($b['notification_id']??null); $n=one('SELECT notification_id FROM notifications WHERE notification_id=? AND user_id=?',[$id,(int)$_SESSION['user_id']]); if (!$n) fail(404,'Notification not found.');
-    query('UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE notification_id=? AND user_id=?',[$id,(int)$_SESSION['user_id']]); reply(['notification_id'=>$id]);
+    $id = id($b['notification_id'] ?? null, 'notification_id');
+    $updated = one(
+        'UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE notification_id=? AND user_id=? RETURNING notification_id,read_at',
+        [$id, (int) $_SESSION['user_id']]
+    );
+    if (!$updated) fail(404, 'Notification not found.');
+    reply($updated, 'Notification marked as read.');
 }
 if ($section==='announcements') {
     if ($action==='get') reply(rows("SELECT announcement_id,title,body,audience,expires_on,created_at FROM announcements WHERE (audience='All' OR audience=?) AND (expires_on IS NULL OR expires_on>=CURRENT_DATE) ORDER BY announcement_id DESC".pageLimit(),[$_SESSION['role_name']]));

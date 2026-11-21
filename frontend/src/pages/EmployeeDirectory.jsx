@@ -42,10 +42,12 @@ function employeeFromOffer(previous, offer) {
 
 function EmployeeDirectory() {
   const currentRole = JSON.parse(localStorage.getItem('hrms_user') || 'null')?.role_name
+  const isManager = currentRole === 'Manager'
   const canManageEmployees = ['Admin', 'HR'].includes(currentRole)
   const [employees, setEmployees] = useState([])
   const [search, setSearch] = useState('')
-  const [employmentStatus, setEmploymentStatus] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const employmentStatus = searchParams.get('status') || ''
   const [employmentType, setEmploymentType] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('')
   const [hiredFrom, setHiredFrom] = useState('')
@@ -54,13 +56,13 @@ function EmployeeDirectory() {
   const [success, setSuccess] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [configuration, setConfiguration] = useState({ departments: [], positions: [] })
+  const [adding, setAdding] = useState(false)
   const [employeeForm, setEmployeeForm] = useState(emptyEmployeeForm)
   const [editingEmployeeId, setEditingEmployeeId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [newAccount, setNewAccount] = useState(null)
   const [offers, setOffers] = useState([])
   const [offerError, setOfferError] = useState('')
-  const [searchParams, setSearchParams] = useSearchParams()
   const requestedOffer = searchParams.get('offer')
 
   useEffect(() => {
@@ -159,11 +161,15 @@ function EmployeeDirectory() {
 
   const selectOffer = (event) => {
     const offer = offers.find((candidate) => String(candidate.application_id) === event.target.value)
-    if (requestedOffer) setSearchParams({}, { replace: true })
+    if (requestedOffer) {
+      setAdding(true)
+      setSearchParams({}, { replace: true })
+    }
     setEmployeeForm((previous) => employeeFromOffer(previous, offer))
   }
 
   const beginEdit = (employee) => {
+    setAdding(true)
     setEditingEmployeeId(employee.employee_id)
     setEmployeeForm({
       employee_number: employee.employee_number || '',
@@ -190,6 +196,7 @@ function EmployeeDirectory() {
   }
 
   const resetEmployeeForm = () => {
+    setAdding(false)
     setEditingEmployeeId(null)
     setEmployeeForm(emptyEmployeeForm)
     if (requestedOffer) setSearchParams({}, { replace: true })
@@ -285,10 +292,12 @@ function EmployeeDirectory() {
                 <h2 className="mt-2 text-lg font-bold text-slate-900">{editingEmployeeId ? 'Edit employee' : 'Add employee'}</h2>
                 <p className="mt-1 text-sm text-slate-600">Nexa assigns an employee number when you save. Select the department and position by name.</p>
               </div>
-              {editingEmployeeId && <button type="button" onClick={resetEmployeeForm} className="action-button-secondary">Cancel editing</button>}
+              {adding || requestedOffer
+                ? <button type="button" onClick={resetEmployeeForm} className="action-button-secondary">Close employee form</button>
+                : <button type="button" onClick={() => setAdding(true)} className="action-button-primary">New employee</button>}
             </div>
 
-            <form onSubmit={saveEmployee} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {(adding || requestedOffer) && <form onSubmit={saveEmployee} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {!editingEmployeeId && (
                 <label className="md:col-span-2 xl:col-span-4">
                   <span className="mb-2 block text-sm font-medium text-slate-700">Start from a recruitment offer</span>
@@ -300,6 +309,8 @@ function EmployeeDirectory() {
                   {employeeForm.application_id && <span className="mt-1 block text-sm text-slate-600">Review the suggested details before saving. Saving marks the applicant hired and opens their onboarding checklist.</span>}
                 </label>
               )}
+              <fieldset className="col-span-full grid min-w-0 gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                <legend className="px-2 text-sm font-semibold text-slate-900">Personal details</legend>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee number</span><input readOnly value={employeeForm.employee_number || (editingEmployeeId ? 'Legacy record' : 'Assigned when saved')} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">First name</span><input required name="first_name" value={employeeForm.first_name} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Middle name</span><input name="middle_name" value={employeeForm.middle_name} onChange={handleEmployeeFormChange} className="field-input" /></label>
@@ -307,13 +318,20 @@ function EmployeeDirectory() {
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Gender</span><select required name="gender" value={employeeForm.gender} onChange={handleEmployeeFormChange} className="field-input"><option value="Female">Female</option><option value="Male">Male</option><option value="Other">Other</option></select></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Date of birth</span><input type="date" name="date_of_birth" value={employeeForm.date_of_birth} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">National ID</span><input name="national_id" value={employeeForm.national_id} onChange={handleEmployeeFormChange} className="field-input" autoComplete="off" /></label>
+              </fieldset>
+              <fieldset className="col-span-full grid min-w-0 gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                <legend className="px-2 text-sm font-semibold text-slate-900">Contact details</legend>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Email</span><input required type="email" name="email" value={employeeForm.email} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Phone</span><input name="phone" value={employeeForm.phone} onChange={handleEmployeeFormChange} className="field-input" /></label>
+              <label className="md:col-span-2 xl:col-span-1"><span className="mb-2 block text-sm font-medium text-slate-700">Address</span><input name="address" value={employeeForm.address} onChange={handleEmployeeFormChange} className="field-input" /></label>
+              </fieldset>
+              <fieldset className="col-span-full grid min-w-0 gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 xl:grid-cols-4">
+                <legend className="px-2 text-sm font-semibold text-slate-900">Employment details</legend>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Hire date</span><input required type="date" name="hire_date" value={employeeForm.hire_date} onChange={handleEmployeeFormChange} className="field-input" /></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Department</span><select required name="department_id" value={employeeForm.department_id} onChange={handleEmployeeFormChange} className="field-input"><option value="">Select department</option>{configuration.departments.map((department) => <option key={department.department_id} value={department.department_id}>{department.department_code ? `${department.department_code} · ` : ''}{department.department_name}</option>)}</select></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Position</span><select required name="position_id" value={employeeForm.position_id} onChange={handleEmployeeFormChange} disabled={!employeeForm.department_id} className="field-input"><option value="">Select position</option>{availablePositions.map((position) => <option key={position.position_id} value={position.position_id}>{position.position_name}</option>)}</select></label>
               <label><span className="mb-2 block text-sm font-medium text-slate-700">Employment type</span><select required name="employment_type" value={employeeForm.employment_type} onChange={handleEmployeeFormChange} className="field-input"><option value="Full-Time">Full-Time</option><option value="Part-Time">Part-Time</option><option value="Contract">Contract</option><option value="Temporary">Temporary</option></select></label>
-              <label className="md:col-span-2 xl:col-span-1"><span className="mb-2 block text-sm font-medium text-slate-700">Address</span><input name="address" value={employeeForm.address} onChange={handleEmployeeFormChange} className="field-input" /></label>
+              </fieldset>
               {!editingEmployeeId && (
                 <>
                   <label><span className="mb-2 block text-sm font-medium text-slate-700">Basic salary (optional, ZMW)</span><input type="number" min="0" step="0.01" name="basic_salary" value={employeeForm.basic_salary} onChange={handleEmployeeFormChange} className="field-input" placeholder="e.g. 7500.00" /></label>
@@ -322,7 +340,7 @@ function EmployeeDirectory() {
                 </>
               )}
               <button type="submit" disabled={saving || configuration.departments.length === 0} className="action-button-primary md:col-span-2 xl:col-span-4">{saving ? 'Saving employee...' : editingEmployeeId ? 'Save employee changes' : 'Add employee'}</button>
-            </form>
+            </form>}
           </section>
         )}
 
@@ -373,7 +391,12 @@ function EmployeeDirectory() {
                 <select
                   id="employment-status"
                   value={employmentStatus}
-                  onChange={(event) => setEmploymentStatus(event.target.value)}
+                  onChange={(event) => setSearchParams((previous) => {
+                  const next = new URLSearchParams(previous)
+                  if (event.target.value) next.set('status', event.target.value)
+                  else next.delete('status')
+                  return next
+                })}
                   aria-describedby="employee-filter-status"
                   className="field-input w-full sm:w-48"
                 >
@@ -426,13 +449,13 @@ function EmployeeDirectory() {
 
           {!loading && !error && employees.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="min-w-full text-left text-sm">
+              <table className="employee-roster min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">ID</th>
                     <th className="px-4 py-3 font-semibold">Employee number</th>
                     <th className="px-4 py-3 font-semibold">Name</th>
-                    <th className="px-4 py-3 font-semibold">Department</th>
+                    {!isManager && <th className="px-4 py-3 font-semibold">Department</th>}
                     <th className="px-4 py-3 font-semibold">Position</th>
                     <th className="px-4 py-3 font-semibold">Employment type</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
@@ -442,15 +465,15 @@ function EmployeeDirectory() {
                 <tbody className="divide-y divide-slate-200">
                   {employees.map((employee) => (
                     <tr key={employee.employee_id} className="bg-white">
-                      <td className="px-4 py-3 text-slate-700">{employee.employee_id}</td>
-                      <td className="px-4 py-3 text-slate-700">{employee.employee_number}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{employee.first_name} {employee.last_name}</td>
-                      <td className="px-4 py-3 text-slate-700">{employee.department_name || 'Unassigned'}</td>
-                      <td className="px-4 py-3 text-slate-700">{employee.position_name || 'Unassigned'}</td>
-                      <td className="px-4 py-3 text-slate-700">{employee.employment_type}</td>
-                      <td className="px-4 py-3 text-slate-700">{employee.employment_status}</td>
+                      <td data-label="ID" className="px-4 py-3 text-slate-700">{employee.employee_id}</td>
+                      <td data-label="Employee number" className="px-4 py-3 text-slate-700">{employee.employee_number}</td>
+                      <td data-label="Name" className="px-4 py-3 font-medium text-slate-900">{employee.first_name} {employee.last_name}</td>
+                      {!isManager && <td data-label="Department" className="px-4 py-3 text-slate-700">{employee.department_name || 'Unassigned'}</td>}
+                      <td data-label="Position" className="px-4 py-3 text-slate-700">{employee.position_name || 'Unassigned'}</td>
+                      <td data-label="Employment type" className="px-4 py-3 text-slate-700">{employee.employment_type}</td>
+                      <td data-label="Status" className="px-4 py-3 text-slate-700">{employee.employment_status}</td>
                       {canManageEmployees && (
-                        <td className="px-4 py-3">
+                        <td data-label="Actions" className="px-4 py-3">
                           <div className="flex flex-wrap gap-2">
                             <button type="button" disabled={saving} onClick={() => beginEdit(employee)} className="action-button-secondary">Edit</button>
                             <button type="button" disabled={saving} onClick={() => changeEmployeeStatus(employee, employee.employment_status === 'Active' ? 'Inactive' : 'Active')} className="action-button-secondary">{employee.employment_status === 'Active' ? 'Deactivate' : 'Reactivate'}</button>

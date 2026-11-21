@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import {
   Bar,
   BarChart,
@@ -32,17 +33,17 @@ function DashboardInsights({
 
   return (
     <section className="workspace-insights" aria-labelledby="dashboard-insights-title">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-4 flex flex-col gap-3">
         <div>
           <span className="panel-heading__eyebrow">Live HR data</span>
           <h2 id="dashboard-insights-title" className="mt-1 text-xl font-bold text-slate-900">{title}</h2>
           {description && <p className="mt-1 max-w-3xl text-sm text-slate-600">{description}</p>}
         </div>
         {filters.length > 0 && (
-          <div className="flex flex-col items-start gap-2 sm:items-end">
+          <div className="flex flex-col items-start gap-2">
             <div className="flex flex-wrap gap-3">
               {filters.map((filter) => (
-                <label key={filter.id} className="min-w-36">
+                <label key={filter.id} className="min-w-0 flex-1 basis-40">
                   <span className="mb-1 block text-xs font-medium text-slate-600">{filter.label}</span>
                   {filter.type === 'select' ? (
                     <select className="field-input" value={filter.value} onChange={filter.onChange} disabled={loading}>
@@ -65,7 +66,7 @@ function DashboardInsights({
                 </label>
               ))}
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {filterSummary && <p className="text-xs text-slate-500">{filterSummary}</p>}
               {onResetFilters && (
                 <button type="button" className="action-button-secondary" onClick={onResetFilters} disabled={loading}>
@@ -88,13 +89,18 @@ function DashboardInsights({
 
       {!loading && hasKpis && (
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((kpi) => (
-            <article key={kpi.label} className="panel-surface p-4 sm:p-5">
-              <p className="section-label">{kpi.label}</p>
+          {kpis.map((kpi) => {
+            const card = <>
+              <p className="text-sm font-medium text-slate-700">{kpi.label}</p>
               <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">{kpi.value ?? 'Unavailable'}</p>
-              {kpi.detail && <p className="mt-1 text-xs leading-5 text-slate-500">{kpi.detail}</p>}
-            </article>
-          ))}
+              {kpi.detail && <p className="mt-1 text-sm leading-5 text-slate-600">{kpi.detail}</p>}
+            </>
+            return kpi.to
+              ? <Link key={kpi.label} to={kpi.to} className="panel-surface block p-4 hover:border-sky-500 focus-visible:outline-2 focus-visible:outline-sky-600 sm:p-5">
+                  {card}<span className="mt-2 block text-sm font-semibold text-sky-800">View records</span>
+                </Link>
+              : <article key={kpi.label} className="panel-surface p-4 sm:p-5">{card}</article>
+          })}
         </div>
       )}
 
@@ -114,7 +120,7 @@ function DashboardInsights({
                 <ResponsiveContainer width="100%" height={260}>
                   {chart.type === 'pie' ? (
                     <PieChart>
-                      <Pie data={chart.data} dataKey="value" nameKey="name" cx="50%" cy="48%" outerRadius={82} label>
+                      <Pie data={chart.data} dataKey="value" nameKey="name" cx="50%" cy="48%" outerRadius="65%">
                         {chart.data.map((entry, index) => (
                           <Cell key={`${entry.name}-${index}`} fill={chartColors[index % chartColors.length]} />
                         ))}
@@ -125,7 +131,7 @@ function DashboardInsights({
                   ) : chart.type === 'line' ? (
                     <LineChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
                       <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                      <XAxis dataKey={chart.xKey} tick={{ fontSize: 12 }} />
+                      <XAxis dataKey={chart.xKey} minTickGap={20} tickMargin={7} tick={{ fontSize: 12 }} />
                       <YAxis tick={{ fontSize: 12 }} width={68} />
                       <Tooltip />
                       <Legend />
@@ -145,8 +151,8 @@ function DashboardInsights({
                   ) : (
                     <BarChart data={chart.data} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
                       <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-                      <XAxis dataKey={chart.xKey} tick={{ fontSize: 12 }} />
-                      <YAxis allowDecimals={Boolean(chart.currency)} tick={{ fontSize: 12 }} width={chart.currency ? 76 : 48}
+                      <XAxis dataKey={chart.xKey} minTickGap={20} tickMargin={7} tick={{ fontSize: 12 }} />
+                      <YAxis allowDecimals={Boolean(chart.currency)} tick={{ fontSize: 12 }} width={chart.currency ? 56 : 42}
                         tickFormatter={chart.currency ? (value) => new Intl.NumberFormat('en', { notation: 'compact' }).format(value) : undefined} />
                       <Tooltip formatter={chart.currency ? (value) => `${chart.currency} ${Number(value).toLocaleString('en', { minimumFractionDigits: 2 })}` : undefined} />
                       {chart.series.length > 1 && <Legend />}

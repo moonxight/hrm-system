@@ -287,7 +287,7 @@ function PayrollPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-600">HRMS</p>
               <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Payroll</h1>
               <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                Create and complete a payroll record using the existing PHP payroll workflow.
+                {canManagePayroll ? 'Prepare payroll and record payments.' : 'Review payroll records you have access to.'}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -311,7 +311,7 @@ function PayrollPage() {
         <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <SummaryCard label="Total payroll records" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : payrollRecords.length} />
           <SummaryCard label="Processed payrolls" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : processedPayrolls} />
-          <SummaryCard label="Draft payrolls" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : draftPayrolls} />
+          {canManagePayroll && <SummaryCard label="Draft payrolls" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : draftPayrolls} />}
           <SummaryCard label="Latest net salary" value={payrollRecordsLoading ? 'Loading...' : payrollRecordsError ? 'Unavailable' : formatAmount(latestNetSalary)} />
         </section>
 
@@ -320,7 +320,7 @@ function PayrollPage() {
             <div>
               <p className="section-label">Existing records</p>
               <h2 className="mt-2 text-lg font-bold text-slate-900">Payroll history</h2>
-              <p className="mt-1 text-sm text-slate-600">Select a payroll record to view its summary and work with its items.</p>
+              <p className="mt-1 text-sm text-slate-600">Select a payroll record to view its summary and items.</p>
             </div>
             <label className="w-full sm:max-w-sm">
               <span className="mb-2 block text-sm font-medium text-slate-700">Payroll record</span>
@@ -430,17 +430,14 @@ function PayrollPage() {
           </section>
         )}
 
-        <section className="mb-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="panel-surface p-5 sm:p-6">
+        <section className={`mb-6 grid gap-6 ${canManagePayroll ? 'lg:grid-cols-[1.1fr_0.9fr]' : ''}`}>
+          {canManagePayroll && <div className="panel-surface p-5 sm:p-6">
             <div className="mb-5">
               <p className="section-label">Step 1</p>
               <h2 className="mt-2 text-lg font-bold text-slate-900">Create Draft Payroll</h2>
               <p className="mt-1 text-sm text-slate-600">The backend looks up the employee&apos;s active salary.</p>
             </div>
 
-            {!canManagePayroll ? (
-              <p className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-700">Your payroll records are view-only.</p>
-            ) : (
             <form onSubmit={createPayroll} className="grid gap-4 sm:grid-cols-2">
               <label className="sm:col-span-2">
                 <span className="mb-2 block text-sm font-medium text-slate-700">Employee</span>
@@ -473,8 +470,7 @@ function PayrollPage() {
                 {loadingAction === 'create' ? 'Creating draft...' : 'Create Draft Payroll'}
               </button>
             </form>
-            )}
-          </div>
+          </div>}
 
           <div className="panel-surface p-5 sm:p-6">
             <div className="mb-5 flex items-center justify-between gap-3">
@@ -511,9 +507,9 @@ function PayrollPage() {
         <section className="panel-surface mb-6 p-5 sm:p-6">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="section-label">Step 2</p>
+              {canManagePayroll && <p className="section-label">Step 2</p>}
               <h2 className="mt-2 text-lg font-bold text-slate-900">Payroll Items</h2>
-              <p className="mt-1 text-sm text-slate-600">Add real allowances or deductions to the selected Draft payroll.</p>
+              {canManagePayroll && <p className="mt-1 text-sm text-slate-600">Add allowances or deductions to the selected draft payroll.</p>}
             </div>
             <button type="button" disabled={!payroll || isBusy} onClick={() => loadItems()} className="action-button-secondary">
               {loadingAction === 'items' ? 'Loading items...' : 'Load Items'}
@@ -589,21 +585,21 @@ function PayrollPage() {
           </section>
         )}
 
-        <section className="panel-surface p-5 sm:p-6">
+        {canManagePayroll && <section className="panel-surface p-5 sm:p-6">
           <div className="mb-5">
             <p className="section-label">Steps 3 and 4</p>
             <h2 className="mt-2 text-lg font-bold text-slate-900">Calculate and Process</h2>
             <p className="mt-1 text-sm text-slate-600">Calculation updates the totals. Processing changes a Draft to Processed.</p>
           </div>
-          {canManagePayroll && <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <button type="button" disabled={!payroll || isProcessed || isBusy} onClick={calculatePayroll} className="action-button-primary">
               {loadingAction === 'calculate' ? 'Calculating...' : 'Calculate Payroll'}
             </button>
             <button type="button" disabled={!payroll || isProcessed || isBusy} onClick={processPayroll} className="action-button-secondary">
               {loadingAction === 'process' ? 'Processing...' : 'Process Payroll'}
             </button>
-          </div>}
-        </section>
+          </div>
+        </section>}
 
         {canManagePayroll && isProcessed && !payroll.payment_recorded_on && (
           <section className="panel-surface mt-6 p-5 sm:p-6">

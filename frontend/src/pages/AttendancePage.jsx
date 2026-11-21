@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
 
 function getErrorMessage(error, fallback) {
@@ -7,7 +7,7 @@ function getErrorMessage(error, fallback) {
 }
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const attendanceStatuses = ['Present', 'Absent', 'Late', 'Present (Half Day)', 'Late (Half Day)', 'Half-Day', 'Early Checkout', 'On Leave', 'Off Schedule']
+const attendanceStatuses = ['Present', 'Absent', 'Late', 'Present (Half Day)', 'Late (Half Day)', 'Early Checkout', 'On Leave', 'Off Schedule']
 
 function displayTime(value) {
   return value ? String(value).slice(0, 5) : '—'
@@ -17,11 +17,26 @@ function AttendancePage() {
   const storedUser = localStorage.getItem('hrms_user')
   const user = storedUser ? JSON.parse(storedUser) : null
   const isEmployee = user?.role_name === 'Employee'
+  const [query, setQuery] = useSearchParams()
+  const isManager = user?.role_name === 'Manager'
   const isAdmin = user?.role_name === 'Admin'
   const [records, setRecords] = useState([])
-  const [employeeId, setEmployeeId] = useState('')
-  const [status, setStatus] = useState('')
-  const [date, setDate] = useState('')
+  const [staff, setStaff] = useState([])
+  const employeeId = query.get('employee_id') || ''
+  const status = query.get('status') || ''
+  const date = query.get('date') || ''
+  const month = query.get('month') || ''
+
+  const changeFilter = (name, value) => {
+    setQuery((current) => {
+      const next = new URLSearchParams(current)
+      if (name === 'date' && value) next.delete('month')
+      if (name === 'month' && value) next.delete('date')
+      if (value) next.set(name, value)
+      else next.delete(name)
+      return next
+    })
+  }
   const [loading, setLoading] = useState(true)
   const [action, setAction] = useState('')
   const [error, setError] = useState('')
@@ -43,6 +58,17 @@ function AttendancePage() {
   }, [isEmployee])
 
   useEffect(() => { void Promise.resolve().then(loadToday) }, [loadToday])
+
+  useEffect(() => {
+    if (isEmployee) return undefined
+    const controller = new AbortController()
+    apiClient.get('/api/employees/get.php', { params: { limit: 200 }, signal: controller.signal })
+      .then(({ data }) => setStaff(data.data || []))
+      .catch((failure) => {
+        if (!controller.signal.aborted) setError(getErrorMessage(failure, 'Employee names could not be loaded.'))
+      })
+    return () => controller.abort()
+  }, [isEmployee])
 
   const loadPolicy = useCallback(async () => {
     setPolicyLoading(true)
@@ -69,7 +95,7 @@ function AttendancePage() {
     setError('')
 
     try {
-      const params = { date: date || undefined, status: status || undefined }
+      const params = { date: date || undefined, month: month || undefined, status: status || undefined }
       if (!isEmployee && employeeId) params.employee_id = employeeId
       const response = await apiClient.get('/api/attendance/get.php', { params })
       setRecords(response.data.data || [])
@@ -79,7 +105,7 @@ function AttendancePage() {
     } finally {
       setLoading(false)
     }
-  }, [date, status, employeeId, isEmployee])
+  }, [date, month, status, employeeId, isEmployee])
 
   useEffect(() => {
     const load = async () => {
@@ -166,7 +192,7 @@ function AttendancePage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-7xl">
-        <header className="panel-surface mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div><p className="section-label">Nexa People / Time</p><h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Attendance & work hours</h1><p className="mt-2 text-sm text-slate-600">Check-in records are classified from the organisation&apos;s active working-hour policy.</p></div><div className="flex flex-wrap items-center gap-3"><nav aria-label="Leave and attendance" className="flex rounded-lg bg-slate-100 p-1"><Link to="/leave" className="rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900">Leave Management</Link><Link to="/attendance" className="rounded-md bg-white px-3 py-2 text-sm font-medium text-sky-700 shadow-sm">Attendance</Link></nav><Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link></div></header>
+        <header className="panel-surface mb-6 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6"><div><p className="section-label">Nexa People / Time</p><h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Attendance & work hours</h1><p className="mt-2 text-sm text-slate-600">Check-in records are classified from the organisation&apos;s active working-hour policy.</p></div><div className="flex flex-wrap items-center gap-3"><Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link></div></header>
 
         {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
         {success && <div role="status" className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
@@ -226,9 +252,15 @@ function AttendancePage() {
 
         <section className="panel-surface mb-6 p-5 sm:p-6">
           <div className="grid gap-4 md:grid-cols-4 md:items-end">
-            {!isEmployee && <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee ID</span><input className="field-input" type="number" min="1" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder="All employees" /></label>}
-            <label><span className="mb-2 block text-sm font-medium text-slate-700">Date</span><input className="field-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-            <label><span className="mb-2 block text-sm font-medium text-slate-700">Status</span><select className="field-input" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{attendanceStatuses.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
+            {!isEmployee && <label><span className="mb-2 block text-sm font-medium text-slate-700">Employee</span>
+              <select className="field-input" value={employeeId} onChange={(event) => changeFilter('employee_id', event.target.value)}>
+                <option value="">All employees in scope</option>
+                {staff.map((person) => <option key={person.employee_id} value={person.employee_id}>{person.first_name} {person.last_name}</option>)}
+              </select>
+            </label>}
+            <label><span className="mb-2 block text-sm font-medium text-slate-700">Date</span><input className="field-input" type="date" value={date} onChange={(event) => changeFilter('date', event.target.value)} /></label>
+            <label><span className="mb-2 block text-sm font-medium text-slate-700">Month</span><input className="field-input" type="month" value={month} onChange={(event) => changeFilter('month', event.target.value)} /></label>
+            <label><span className="mb-2 block text-sm font-medium text-slate-700">Status</span><select className="field-input" value={status} onChange={(event) => changeFilter('status', event.target.value)}><option value="">All statuses</option><option value="half_days">All half-day records</option><option value="present_days">Present including half days</option>{attendanceStatuses.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>
           {isEmployee && <div className="space-y-2">
             <div className="flex flex-wrap gap-3">
               <button type="button" disabled={Boolean(action) || !today.ready || Boolean(today.record)} onClick={() => runAction('check-in', '/api/attendance/check-in.php')} className="action-button-primary">{action === 'check-in' ? 'Checking in…' : 'Check in'}</button>
@@ -241,7 +273,7 @@ function AttendancePage() {
           {isEmployee ? <p className="mt-4 rounded-xl border border-[#ffd1dc] bg-[#fff7f9] px-4 py-3 text-sm text-slate-700">Check-in confirms the account action, but location is currently marked <strong>Unverified</strong>. The system does not claim that the employee is physically at work.</p> : <p className="mt-4 text-sm text-slate-600">Managers see assigned employees only. Admin and HR can review organisation-wide attendance.</p>}
         </section>
 
-        <section className="panel-surface p-5 sm:p-6"><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">Attendance records</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{loading ? 'Loading' : `${records.length} records`}</span></div>{loading ? <p className="py-6 text-center text-sm text-slate-600">Loading attendance records...</p> : records.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">No attendance records found.</p> : <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Check in</th><th className="px-4 py-3">Check out</th><th className="px-4 py-3">Worked / expected</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Verification</th></tr></thead><tbody className="divide-y divide-slate-200">{records.map((record) => <tr key={record.attendance_id} className="bg-white"><td className="px-4 py-3 text-slate-700"><span className="font-medium text-slate-900">{record.employee_name || record.employee_id}</span><span className="mt-1 block text-xs text-slate-500">{record.department_name || record.employee_number || ''}</span></td><td className="px-4 py-3 text-slate-700">{record.attendance_date}</td><td className="px-4 py-3 text-slate-700">{displayTime(record.check_in)}</td><td className="px-4 py-3 text-slate-700">{displayTime(record.check_out)}</td><td className="px-4 py-3 text-slate-700">{Number(record.hours_worked).toFixed(2)} / {Number(record.expected_hours).toFixed(2)}</td><td className="px-4 py-3 text-slate-700"><span className="font-medium">{record.status}</span>{record.late_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.late_minutes} min late</span>}{record.early_departure_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.early_departure_minutes} min early</span>}</td><td className="px-4 py-3 text-slate-700">{record.verification_status || 'Unverified'}</td></tr>)}</tbody></table></div>}</section>
+        <section className="panel-surface p-5 sm:p-6"><div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold text-slate-900">Attendance records</h2><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{loading ? 'Loading' : `${records.length} records`}</span></div>{loading ? <p className="py-6 text-center text-sm text-slate-600">Loading attendance records...</p> : records.length === 0 ? <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">No attendance records found.</p> : <div className="overflow-x-auto rounded-xl border border-slate-200"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-[0.12em] text-slate-500"><tr><th className="px-4 py-3">Employee</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Check in</th><th className="px-4 py-3">Check out</th><th className="px-4 py-3">Worked / expected</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Verification</th></tr></thead><tbody className="divide-y divide-slate-200">{records.map((record) => <tr key={record.attendance_id} className="bg-white"><td className="px-4 py-3 text-slate-700"><span className="font-medium text-slate-900">{record.employee_name || record.employee_id}</span>{!isManager && <span className="mt-1 block text-xs text-slate-500">{record.department_name || record.employee_number || ''}</span>}</td><td className="px-4 py-3 text-slate-700">{record.attendance_date}</td><td className="px-4 py-3 text-slate-700">{displayTime(record.check_in)}</td><td className="px-4 py-3 text-slate-700">{displayTime(record.check_out)}</td><td className="px-4 py-3 text-slate-700">{Number(record.hours_worked).toFixed(2)} / {Number(record.expected_hours).toFixed(2)}</td><td className="px-4 py-3 text-slate-700"><span className="font-medium">{record.status}</span>{record.late_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.late_minutes} min late</span>}{record.early_departure_minutes > 0 && <span className="mt-1 block text-xs text-slate-500">{record.early_departure_minutes} min early</span>}</td><td className="px-4 py-3 text-slate-700">{record.verification_status || 'Unverified'}</td></tr>)}</tbody></table></div>}</section>
       </div>
     </main>
   )

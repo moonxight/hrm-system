@@ -300,9 +300,14 @@ function managerInsights(data, selectedPeriod) {
   const attendanceRate = attendanceTotal !== null && attendanceTotal > 0 && present !== null
     ? (present / attendanceTotal) * 100
     : null
-  const leaveStatusKey = selectedPeriod.leaveStatus?.toLowerCase()
-  const leaveCountKey = leaveStatusKey === 'half-day' ? 'half_day' : leaveStatusKey === 'on leave' ? 'on_leave' : leaveStatusKey
-  const leaveCount = leaveCountKey ? leave[leaveCountKey] : leave.pending
+  const leaveStatus = selectedPeriod.leaveStatus || 'Pending'
+  const leaveCount = leave[leaveStatus.toLowerCase()]
+  const path = (page, values) => {
+    const params = new URLSearchParams(Object.entries(values).filter(([, value]) => value))
+    return params.size ? `${page}?${params}` : page
+  }
+  const attendanceFilters = { employee_id: selectedPeriod.employeeId, month: selectedPeriod.attendanceMonth }
+  const leaveFilters = { employee_id: selectedPeriod.employeeId, year: selectedPeriod.leaveYear, status: leaveStatus }
   const attendanceStatuses = [
     ['Present', 'present'],
     ['Absent', 'absent'],
@@ -313,21 +318,24 @@ function managerInsights(data, selectedPeriod) {
 
   return {
     kpis: [
-      { label: 'Assigned team', value: formatCount(team.total_team_members) },
-      { label: 'Active team members', value: formatCount(team.active_team_members) },
+      { label: 'Assigned team', value: formatCount(team.total_team_members), to: '/employees' },
+      { label: 'Active team members', value: formatCount(team.active_team_members), to: '/employees?status=Active' },
       {
         label: 'Present in selected period',
         value: formatCount(present),
+        to: path('/attendance', { ...attendanceFilters, status: 'present_days' }),
         detail: `${formatCount(attendanceTotal)} scoped attendance records for ${selectedPeriod.attendanceMonth || 'all dates'}.`,
       },
       {
         label: 'Recorded attendance rate',
+        to: path('/attendance', attendanceFilters),
         value: attendanceRate === null ? 'Unavailable' : `${attendanceRate.toFixed(1)}%`,
         detail: 'Present records divided by recorded team attendance; not a scheduled-workday rate.',
       },
       {
         label: selectedPeriod.leaveStatus ? `${selectedPeriod.leaveStatus} leave requests` : 'Pending leave requests',
         value: formatCount(leaveCount),
+        to: path('/leave', leaveFilters),
         detail: `${formatCount(leave.total_requests)} team requests for ${selectedPeriod.leaveYear || 'all years'}.`,
       },
     ],
@@ -507,6 +515,7 @@ function RoleDashboard() {
   const insights = insightsScope === 'organization'
     ? organizationInsights(insightsState.data)
     : managerInsights(insightsState.data, {
+        employeeId: managerEmployeeId,
         attendanceMonth: managerAttendanceMonth,
         leaveYear: managerLeaveYear,
         leaveStatus: managerLeaveStatus,
@@ -527,7 +536,7 @@ function RoleDashboard() {
             { value: '', label: 'All assigned team members' },
             ...teamMembers.map((item) => ({
               value: String(item.employee.employee_id),
-              label: item.employee.full_name || `Employee ${item.employee.employee_id}`,
+              label: item.employee.full_name || item.employee.employee_number,
             })),
           ],
         },
@@ -563,6 +572,7 @@ function RoleDashboard() {
   return (
     <WorkspaceDashboard
       user={user}
+      departments={[...new Set(teamMembers.map((item) => item.department?.department_name).filter(Boolean))]}
       sessionStatus={sessionStatus}
       title={content.title}
       summary={content.summary}

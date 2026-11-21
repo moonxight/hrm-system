@@ -37,7 +37,7 @@ function OnboardingPage() {
   const caseId = query.get('case') || ''
   const documentId = query.get('document') || ''
   const formId = query.get('form') || ''
-  const [search, setSearch] = useState('')
+  const [employeeFilter, setEmployeeFilter] = useState('')
   const [department, setDepartment] = useState('')
   const [status, setStatus] = useState('')
   const [startAfter, setStartAfter] = useState('')
@@ -161,9 +161,10 @@ function OnboardingPage() {
   }
 
   const departments = [...new Set(records.map((record) => record.department_name).filter(Boolean))].sort()
+  const employees = [...new Map(records.map((record) => [record.employee_id, record.employee_name])).entries()]
+    .sort(([, first], [, second]) => first.localeCompare(second))
   const visible = records.filter((record) => (
-    [record.employee_name, record.employee_number, record.employee_id].some((value) =>
-      String(value ?? '').toLowerCase().includes(search.trim().toLowerCase().replace(/\s+/g, ' ')))
+    (!employeeFilter || String(record.employee_id) === employeeFilter)
     && (!department || record.department_name === department)
     && (!status || record.onboarding_status === status || (record.onboarding_status !== 'Completed' && (
       (status === 'Needs HR review' && (record.requirements.form_status === 'Submitted' || record.documents?.some((item) => item.document_status === 'Submitted')))
@@ -219,7 +220,7 @@ function OnboardingPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 sm:p-6 lg:p-8"><div className="mx-auto max-w-6xl">
-      <header className="panel-surface mb-6 p-4 sm:p-6"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="section-label">Nexa People / Employee lifecycle</p><h1 className="mt-2 text-3xl font-bold text-slate-900">Onboarding</h1><p className="mt-2 text-sm text-slate-600">Complete employee information, documents and HR verification in one protected workflow.</p></div><div className="flex items-center gap-3"><span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">{role}</span><Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link></div></div></header>
+      <header className="panel-surface mb-6 p-4 sm:p-6"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><p className="section-label">Nexa People / Employee lifecycle</p><h1 className="mt-2 text-3xl font-bold text-slate-900">Onboarding</h1><p className="mt-2 text-sm text-slate-600">Complete employee information, documents and HR verification in one protected workflow.</p></div><div className="flex items-center gap-3"><Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link></div></div></header>
 
       <section className="mb-6 grid gap-4 md:grid-cols-4"><div className="panel-surface p-5"><p className="section-label">Records</p><p className="mt-2 text-2xl font-bold text-slate-900">{state === 'ready' ? records.length : '—'}</p></div><div className="panel-surface p-5"><p className="section-label">Current status</p><p className="mt-2 text-lg font-bold text-slate-900">{latest?.onboarding_status || (state === 'ready' ? 'Not started' : '—')}</p></div><div className="panel-surface p-5"><p className="section-label">Documents</p><p className="mt-2 text-2xl font-bold text-slate-900">{requirements?.documents_total ?? 0}</p></div><div className="panel-surface p-5"><p className="section-label">Verified</p><p className="mt-2 text-2xl font-bold text-emerald-600">{latest ? `${latest.verification_percentage || 0}%` : '—'}</p></div></section>
 
@@ -234,7 +235,12 @@ function OnboardingPage() {
         <section className="panel-surface mb-6 p-5 sm:p-6">
           <h2 className="text-lg font-bold text-slate-900">{canRequestDocuments ? 'Onboarding queue' : 'Your team’s onboarding'}</h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <label className="text-sm font-medium">Name or employee ID<input className="field-input mt-1" type="search" value={search} onChange={(event) => changeFilter(setSearch, event.target.value)} /></label>
+            <label className="text-sm font-medium">Employee
+              <select className="field-input mt-1" value={employeeFilter} onChange={(event) => changeFilter(setEmployeeFilter, event.target.value)}>
+                <option value="">All employees in scope</option>
+                {employees.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </label>
             <label className="text-sm font-medium">Department<select className="field-input mt-1" value={department} onChange={(event) => changeFilter(setDepartment, event.target.value)}><option value="">All departments</option>{departments.map((value) => <option key={value}>{value}</option>)}</select></label>
             <label className="text-sm font-medium">Status<select className="field-input mt-1" value={status} onChange={(event) => changeFilter(setStatus, event.target.value)}><option value="">All statuses</option>{['Not Started', 'In Progress', 'On Hold', 'Completed', ...(canReviewForms ? ['Needs HR review', 'Ready to sign off'] : [])].map((value) => <option key={value}>{value}</option>)}</select></label>
             <label className="text-sm font-medium">Starts on or after<input className="field-input mt-1" type="date" value={startAfter} onChange={(event) => changeFilter(setStartAfter, event.target.value)} /></label>

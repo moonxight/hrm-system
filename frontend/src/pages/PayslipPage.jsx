@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import apiClient from '../api/client'
+import { readStoredUser } from '../api/session'
 
 function getErrorMessage(error, fallback) {
   return error.response?.data?.message || fallback
@@ -12,6 +13,7 @@ function formatAmount(amount) {
 }
 
 function PayslipPage() {
+  const canManagePayroll = ['Admin', 'HR'].includes(readStoredUser()?.role_name)
   const [params] = useSearchParams()
   const requestedPayroll = params.get('payroll') || ''
   const [payrollRecords, setPayrollRecords] = useState([])
@@ -99,7 +101,7 @@ function PayslipPage() {
             <p className="mt-2 text-sm text-slate-600">View a payslip from an existing payroll record.</p>
           </div>
           <div className="flex flex-wrap gap-3 print:hidden">
-            <Link to="/payroll" className="action-button-secondary">Back to Payroll</Link>
+            {canManagePayroll && <Link to="/payroll" className="action-button-secondary">Back to Payroll</Link>}
             <Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link>
           </div>
         </header>

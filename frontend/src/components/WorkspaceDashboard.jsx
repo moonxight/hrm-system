@@ -146,25 +146,15 @@ function WorkspaceDashboard({
   title,
   summary,
   statusLabel,
+  departments = [],
   modules,
   insights,
 }) {
   const availableModules = modules.filter((module) => module.availability === 'Available')
   const navigationModules = availableModules.filter((module) => module.internal && module.href)
-  const readiness = modules.length ? Math.round((availableModules.length / modules.length) * 100) : 0
   const sessionLabel = sessionStatus.loading ? 'Checking' : sessionStatus.ok ? 'Verified' : 'Pending'
   const displayName = user.display_name || user.username || 'Team member'
-  const stats = [
-    { label: 'Access', value: sessionLabel, icon: 'shield', tone: 'blue' },
-    { label: 'Role', value: user.role_name || 'Not assigned', icon: 'people', tone: 'green' },
-    { label: 'Available tools', value: `${availableModules.length} of ${modules.length}`, icon: 'dashboard', tone: 'pink' },
-    {
-      label: user.role_name === 'Employee' ? 'Employee ID' : 'User ID',
-      value: user.role_name === 'Employee' ? (user.employee_id || '—') : (user.user_id || '—'),
-      icon: 'lock',
-      tone: 'blue',
-    },
-  ]
+  const isManager = user.role_name === 'Manager'
 
   return (
     <main className="workspace-app">
@@ -200,7 +190,6 @@ function WorkspaceDashboard({
             <span className="profile-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
             <span>
               <strong>{displayName}</strong>
-              <small>{user.role_name}</small>
             </span>
           </div>
         </div>
@@ -213,16 +202,16 @@ function WorkspaceDashboard({
             <p className="workspace-topbar__eyebrow">Good to see you, {displayName}</p>
             <h1>{title}</h1>
           </div>
-          <div className="workspace-topbar__actions">
+          {!isManager && <div className="workspace-topbar__actions">
             <span className={`session-chip${sessionStatus.ok ? ' session-chip--ok' : ''}`}>
               <span className="session-chip__dot" />
               {sessionLabel}
             </span>
-          </div>
+          </div>}
         </header>
 
         <div className="workspace-content">
-          <section className="workspace-hero">
+          {!isManager && <section className="workspace-hero">
             <div>
               <span className="workspace-hero__label">{statusLabel}</span>
               <h2>Everything you need, in one clear workspace.</h2>
@@ -235,24 +224,12 @@ function WorkspaceDashboard({
               <span className="hero-person hero-person--two" />
               <span className="hero-person hero-person--three" />
             </div>
-          </section>
-
-          <section className="workspace-stats" aria-label="Workspace summary">
-            {stats.map((stat) => (
-              <article key={stat.label} className={`stat-card stat-card--${stat.tone}`}>
-                <span className="stat-card__icon"><DashboardIcon name={stat.icon} /></span>
-                <span>
-                  <small>{stat.label}</small>
-                  <strong>{stat.value}</strong>
-                </span>
-              </article>
-            ))}
-          </section>
+          </section>}
 
           {insights && <div className="mb-6">{insights}</div>}
 
-          <div className="workspace-grid">
-            <section className="workspace-panel workspace-panel--modules">
+          <div className={isManager ? '' : 'workspace-grid'}>
+            {!isManager && <section className="workspace-panel workspace-panel--modules">
               <div className="panel-heading">
                 <div>
                   <span className="panel-heading__eyebrow">Your tools</span>
@@ -263,24 +240,9 @@ function WorkspaceDashboard({
               <div className="module-grid">
                 {modules.map((module) => <WorkspaceLink key={module.title} module={module} />)}
               </div>
-            </section>
+            </section>}
 
             <aside className="workspace-rail">
-              <section className="workspace-panel readiness-panel">
-                <div className="panel-heading panel-heading--compact">
-                  <div>
-                    <span className="panel-heading__eyebrow">System readiness</span>
-                    <h2>Available tools</h2>
-                  </div>
-                </div>
-                <div className="readiness-visual">
-                  <div className="readiness-ring" style={{ '--readiness': `${readiness * 3.6}deg` }}>
-                    <span><strong>{readiness}%</strong><small>ready</small></span>
-                  </div>
-                  <p>{availableModules.length} of {modules.length} tools have an available screen or backend check.</p>
-                </div>
-              </section>
-
               <section className="workspace-panel account-panel">
                 <div className="panel-heading panel-heading--compact">
                   <div>
@@ -292,6 +254,8 @@ function WorkspaceDashboard({
                   <div><dt>Username</dt><dd>{user.username || 'Unavailable'}</dd></div>
                   <div><dt>Email</dt><dd>{user.email || 'Unavailable'}</dd></div>
                   <div><dt>Role</dt><dd>{user.role_name || 'Unavailable'}</dd></div>
+                  <div><dt>User ID</dt><dd>{user.user_id || 'Unavailable'}</dd></div>
+                  {isManager && <div><dt>Team departments</dt><dd>{departments.join(', ') || 'None listed'}</dd></div>}
                 </dl>
                 <div className={`access-note${sessionStatus.ok ? ' access-note--ok' : ''}`} aria-live="polite">
                   <DashboardIcon name={sessionStatus.ok ? 'check' : 'lock'} />

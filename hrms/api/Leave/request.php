@@ -196,6 +196,8 @@ if ($reason !== null) {
 
 
 try {
+    // Serialize submissions for this employee across leave types.
+    $conn->begin_transaction();
 
     /*
      * STEP 1:
@@ -206,6 +208,7 @@ try {
         FROM employees
         WHERE employee_id = ?
         LIMIT 1
+        FOR UPDATE
     ";
 
     $employee_stmt = $conn->prepare($employee_sql);
@@ -496,7 +499,6 @@ try {
             status
         FROM leave_requests
         WHERE employee_id = ?
-        AND leave_type_id = ?
         AND status IN ('Pending', 'Approved')
         AND start_date <= ?
         AND end_date >= ?
@@ -510,9 +512,8 @@ try {
     }
 
     $overlap_stmt->bind_param(
-        "iiss",
+        "iss",
         $employee_id,
-        $leave_type_id,
         $end_date,
         $start_date
     );
@@ -581,6 +582,7 @@ try {
     $insert_stmt->execute();
 
     $leave_request_id = $insert_stmt->insert_id;
+    $conn->commit();
 
 
     /*
@@ -604,6 +606,7 @@ try {
     ]);
 
 } catch (Exception $e) {
+    if ($conn->pdo()->inTransaction()) $conn->rollback();
 
     http_response_code(500);
 

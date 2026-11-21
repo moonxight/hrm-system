@@ -100,6 +100,22 @@ $sql = "
 $conditions = [];
 $params = [];
 $types = "";
+
+if (isset($_GET['year']) && $_GET['year'] !== '') {
+    $year = (int) $_GET['year'];
+    if (!preg_match('/^\d{4}$/D', $_GET['year']) || $year < 1900 || $year > 9998) {
+        fail(400, 'Choose a valid leave year.');
+    }
+    $conditions[] = "lr.start_date >= ? AND lr.start_date < ?";
+    $params[] = "$year-01-01";
+    $params[] = ($year + 1) . '-01-01';
+    $types .= "ss";
+}
+if (isset($_GET['leave_request_id'])) {
+    $conditions[] = "lr.leave_request_id = ?";
+    $params[] = id($_GET['leave_request_id'], 'leave_request_id');
+    $types .= "i";
+}
 if ($user_role === "Manager") {
     $conditions[] = "(lr.employee_id = ? OR EXISTS (SELECT 1 FROM manager_assignments ma
         WHERE ma.employee_id = lr.employee_id AND ma.manager_employee_id = ? AND ma.status = 'Active'))";

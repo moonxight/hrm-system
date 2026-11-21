@@ -43,7 +43,6 @@ function BenefitsPage() {
               <p className="mt-2 text-sm text-slate-600">Live benefit plans and employee enrollment records from the HRMS database.</p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">{role}</span>
               <Link to="/dashboard" className="action-button-secondary">Back to Dashboard</Link>
             </div>
           </div>

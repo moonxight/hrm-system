@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import apiClient from '../api/client'
-import { isLockedByOnboarding, readStoredUser } from '../api/session'
+import { isLockedByOnboarding, readStoredUser, refreshSession } from '../api/session'
 
 const leads = ['Admin', 'HR', 'Manager']
 const hr = ['Admin', 'HR']
@@ -38,44 +38,99 @@ function destination(notification, user) {
 
 function NotificationMenu({ user }) {
   const [items, setItems] = useState([])
-  const [state, setState] = useState('loading')
+  const [loadState, setLoadState] = useState('loading')
+  const [readError, setReadError] = useState('')
   const [open, setOpen] = useState(false)
+  const [revision, refreshNotifications] = useState(0)
+  const container = useRef(null)
+  const trigger = useRef(null)
   const location = useLocation()
   const unread = items.filter((item) => !item.read_at).length
 
   useEffect(() => {
-    let active = true
-    apiClient.get('/api/notifications/get.php', { params: { limit: 20 } }).then(({ data }) => {
-      if (!active) return
+    const controller = new AbortController()
+    apiClient.get('/api/notifications/get.php', { params: { limit: 20 }, signal: controller.signal }).then(({ data }) => {
+      if (controller.signal.aborted) return
       setItems(data.data || [])
-      setState('ready')
-    }).catch(() => { if (active) setState('error') })
-    return () => { active = false }
-  }, [location.key, open])
+      setLoadState('ready')
+    }).catch(() => { if (!controller.signal.aborted) setLoadState('error') })
+    return () => controller.abort()
+  }, [location.key, revision])
+
+  const close = () => {
+    setOpen(false)
+    trigger.current?.focus()
+  }
+
+  useEffect(() => {
+    if (!open) return undefined
+    const dismissOutside = (event) => {
+      if (!container.current?.contains(event.target)) setOpen(false)
+    }
+    const dismissWithEscape = (event) => {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('pointerdown', dismissOutside)
+    document.addEventListener('keydown', dismissWithEscape)
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside)
+      document.removeEventListener('keydown', dismissWithEscape)
+    }
+  }, [open])
 
   async function markRead(item) {
     if (item.read_at) return
+    setReadError('')
     try {
-      await apiClient.post('/api/notifications/read.php', { notification_id: item.notification_id })
-      setItems((previous) => previous.map((entry) => entry.notification_id === item.notification_id ? { ...entry, read_at: new Date().toISOString() } : entry))
-    } catch { setState('error') }
+      const send = () => apiClient.post('/api/notifications/read.php', { notification_id: item.notification_id })
+      const { data } = await send().catch(async (failure) => {
+        if (failure.response?.status !== 403 || !failure.response?.data?.message?.includes('X-CSRF-Token')) throw failure
+        await refreshSession()
+        return send()
+      })
+      setItems((previous) => previous.map((entry) => entry.notification_id === item.notification_id
+        ? { ...entry, read_at: data.data.read_at }
+        : entry))
+    } catch (failure) {
+      setReadError(failure.response?.data?.message || 'Could not mark this notification as read. Try again.')
+    }
   }
 
-  return <div onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false) }}>
-    <button type="button" className="action-button-secondary" aria-expanded={open} aria-label={`Notifications, ${unread} unread`} onClick={() => setOpen(!open)}>Notifications{unread > 0 ? ` (${unread})` : ''}</button>
-    {open && <div className="notification-popover" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
-      <div className="notification-popover__heading"><strong>Notifications</strong><small>{unread} unread</small></div>
-      {state === 'loading' && <p className="notification-empty" role="status">Loading notifications…</p>}
-      {state === 'error' && <p className="notification-empty" role="alert">Could not update notifications. Reopen this menu to retry.</p>}
-      {state === 'ready' && !items.length && <p className="notification-empty">You’re all caught up.</p>}
-      {items.map((item) => {
-        const target = destination(item, user)
-        const style = `notification-item${item.read_at ? '' : ' notification-item--unread'}`
-        return target ? <Link key={item.notification_id} className={style} to={target.path} onClick={() => { void markRead(item); setOpen(false) }}><span>{item.title}</span><small>Open {target.label}</small></Link> :
-          <button type="button" key={item.notification_id} className={style} onClick={() => markRead(item)}><span>{item.title}</span><small>{item.read_at ? 'Read' : 'Mark as read'}</small></button>
-      })}
-    </div>}
-  </div>
+  return (
+    <div ref={container}>
+      <button ref={trigger} type="button" className="action-button-secondary" aria-expanded={open}
+        aria-controls="workspace-notifications" aria-label={`Notifications, ${unread} unread`}
+        onClick={() => {
+          setReadError('')
+          if (!open) refreshNotifications((value) => value + 1)
+          setOpen(!open)
+        }}>
+        Notifications{unread > 0 ? ` (${unread})` : ''}
+      </button>
+      {open && <div id="workspace-notifications" className="notification-popover" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+        <div className="notification-popover__heading">
+          <div><strong>Notifications</strong><small className="ml-2" role="status">{unread} unread</small></div>
+          <button type="button" className="action-button-secondary" onClick={close}>Close</button>
+        </div>
+        {loadState === 'loading' && <p className="notification-empty" role="status">Loading notifications.</p>}
+        {loadState === 'error' && <p className="notification-empty" role="alert">Could not load notifications. Reopen this menu to retry.</p>}
+        {readError && <p className="notification-empty" role="alert">{readError}</p>}
+        {loadState === 'ready' && !items.length && <p className="notification-empty">You're all caught up.</p>}
+        {items.map((item) => {
+          const target = destination(item, user)
+          return <div key={item.notification_id} className={`notification-item${item.read_at ? '' : ' notification-item--unread'}`}>
+            <span>{item.title}</span>
+            <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+              {target && <Link className="font-semibold text-sky-800 underline underline-offset-2" to={target.path}
+                onClick={() => { void markRead(item); setOpen(false) }}>Open {target.label}</Link>}
+              {item.read_at ? <small>Read</small> : <button type="button" className="min-h-9 font-semibold text-sky-800"
+                onClick={() => markRead(item)}>Mark as read</button>}
+            </div>
+          </div>
+        })}
+      </div>}
+    </div>
+  )
 }
 
 export default function WorkspaceNavigation() {
@@ -102,16 +157,18 @@ export default function WorkspaceNavigation() {
     }
   }
 
-  return <nav className="relative z-40 border-b border-slate-200 bg-white px-3 py-2 sm:px-6 print:hidden" aria-label="Nexa workspace navigation">
-    <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2">
+  return <nav className="workspace-header relative z-40 border-b border-slate-200 bg-white px-2 py-2 sm:px-6 print:hidden" aria-label="Nexa workspace navigation">
+    <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
       <details ref={menu} className="relative" onKeyDown={(event) => { if (event.key === 'Escape') menu.current.open = false }}>
         <summary className="action-button-secondary cursor-pointer list-none">Menu <span aria-hidden="true">▾</span></summary>
         <div className="absolute left-0 top-full mt-2 grid max-h-[65vh] w-56 gap-1 overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
           {available.map(([path, label]) => <NavLink key={path} to={path} end={path !== '/dashboard'} onClick={() => { menu.current.open = false }} className={({ isActive }) => `rounded-lg px-3 py-2 text-sm ${isActive ? 'bg-sky-50 font-semibold text-sky-900' : 'text-slate-700 hover:bg-slate-100'}`}>{label}</NavLink>)}
+          {['calendar', 'help'].map((page) => <NavLink key={page} to={`/${page}`} onClick={() => { menu.current.open = false }}
+            className="rounded-lg px-3 py-2 text-sm capitalize sm:hidden">{page}</NavLink>)}
         </div>
       </details>
       <span className="mr-auto hidden text-sm font-semibold text-slate-700 sm:inline">{here}</span>
-      <div className="flex items-center gap-2">
+      <div className="workspace-header-links hidden items-center gap-2 sm:flex">
         <NavLink to="/calendar" className="action-button-secondary">Calendar</NavLink>
         <NavLink to="/help" className="action-button-secondary">Help</NavLink>
       </div>

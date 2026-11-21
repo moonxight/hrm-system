@@ -1004,6 +1004,50 @@
   font-size: 0.82rem;
 }
 
+@media (max-width: 639px) {
+  .workspace-header .workspace-header-links {
+    display: none;
+  }
+
+  .workspace-header .action-button-secondary {
+    min-height: 44px;
+    padding: 0.5rem 0.625rem;
+    font-size: 0.875rem;
+  }
+
+  .workspace-topbar {
+    position: static;
+  }
+
+  .employee-roster thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .employee-roster tbody,
+  .employee-roster tr,
+  .employee-roster td {
+    display: block;
+  }
+
+  .employee-roster td {
+    display: grid;
+    grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  .employee-roster td::before {
+    content: attr(data-label);
+    color: #475569;
+    font-weight: 600;
+  }
+}
+
 .notification-popover__heading small {
   color: #8a93a6;
   font-size: 0.7rem;
